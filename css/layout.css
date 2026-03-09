@@ -1,0 +1,74 @@
+.app-header {
+  text-align: center;
+  padding: 30px 20px 20px;
+}
+
+.app-header h1 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #7c6ff7, #38bdf8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 6px;
+}
+
+.app-header p {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  font-weight: 300;
+}
+
+.tabs {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 20px 0 24px;
+}
+
+.tab-btn {
+  padding: 8px 20px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.tab-btn.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.tab-btn:hover:not(.active) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.view { display: none; }
+.view.active { display: block; }
+
+.save-banner {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(60px);
+  background: var(--accent);
+  color: white;
+  padding: 10px 24px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  box-shadow: 0 4px 20px rgba(124, 111, 247, 0.4);
+  transition: transform 0.3s;
+  z-index: 50;
+}
+
+.save-banner.show { transform: translateX(-50%) translateY(0); }
+
+@media (max-width: 768px) {
+  .timeline { padding-left: 60px; }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "Flow Blocks",
+  "short_name": "FlowBlocks",
+  "description": "ADHD-Friendly Time Blocker",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f0f13",
+  "theme_color": "#7c6ff7",
+  "icons": [
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

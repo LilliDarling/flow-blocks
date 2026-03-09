@@ -1,0 +1,212 @@
+.pomo-view {
+  max-width: 500px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.pomo-ring-container {
+  position: relative;
+  width: 280px;
+  height: 280px;
+  margin: 20px auto 30px;
+}
+
+.pomo-ring-bg,
+.pomo-ring-progress {
+  position: absolute;
+  inset: 0;
+}
+
+.pomo-ring-bg circle {
+  fill: none;
+  stroke: var(--surface2);
+  stroke-width: 8;
+}
+
+.pomo-ring-progress circle {
+  fill: none;
+  stroke-width: 8;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.5s ease, stroke 0.3s;
+  transform: rotate(-90deg);
+  transform-origin: center;
+}
+
+.pomo-time {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.pomo-digits {
+  font-size: 3.5rem;
+  font-weight: 200;
+  letter-spacing: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pomo-phase-label {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  margin-top: 4px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.pomo-modes {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 24px;
+}
+
+.pomo-mode-btn {
+  padding: 7px 16px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.pomo-mode-btn.active {
+  border-color: var(--accent);
+  color: var(--text);
+  background: var(--accent-glow);
+}
+
+.pomo-mode-btn:hover:not(.active) { border-color: var(--accent); }
+
+.pomo-controls {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 30px;
+}
+
+.pomo-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  transition: all 0.2s;
+}
+
+.pomo-btn:hover { border-color: var(--accent); }
+
+.pomo-btn.primary {
+  width: 72px;
+  height: 72px;
+  border-color: var(--accent);
+  background: var(--accent);
+  font-size: 1.4rem;
+}
+
+.pomo-btn.primary:hover { filter: brightness(1.15); }
+
+.pomo-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.pomo-stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 10px;
+}
+
+.pomo-stat-val {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.pomo-stat-label {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pomo-settings {
+  margin-top: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  text-align: left;
+}
+
+.pomo-settings h4 {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pomo-setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--surface3);
+}
+
+.pomo-setting-row:last-child { border-bottom: none; }
+
+.pomo-setting-row label {
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.pomo-setting-row input[type="number"] {
+  width: 60px;
+  padding: 6px 8px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 0.85rem;
+  font-family: inherit;
+  text-align: center;
+  outline: none;
+}
+
+.pomo-setting-row input[type="number"]:focus { border-color: var(--accent); }
+
+.pomo-sound-toggle {
+  padding: 5px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.pomo-sound-toggle.on {
+  border-color: var(--recharge);
+  color: var(--recharge);
+}

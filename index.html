@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flow Blocks — ADHD-Friendly Time Blocker</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#7c6ff7">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/icon.svg">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/timeline.css">
+  <link rel="stylesheet" href="css/week.css">
+  <link rel="stylesheet" href="css/pomodoro.css">
+  <link rel="stylesheet" href="css/modal.css">
+  <link rel="stylesheet" href="css/tips.css">
+  <link rel="stylesheet" href="css/auth.css">
+</head>
+<body>
+
+<!-- AUTH SCREEN -->
+<div class="auth-screen" id="authScreen">
+  <div class="auth-card">
+    <h2>Flow Blocks</h2>
+    <p class="auth-subtitle">Sign in to sync your blocks across devices</p>
+    <div class="auth-error" id="authError"></div>
+    <div class="form-group">
+      <label>Email</label>
+      <input type="email" id="authEmail" placeholder="you@example.com">
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="authPassword" placeholder="••••••••">
+    </div>
+    <div class="auth-buttons">
+      <button class="btn btn-ghost" id="authSignUp">Sign Up</button>
+      <button class="btn btn-primary" id="authSignIn">Sign In</button>
+    </div>
+  </div>
+</div>
+
+<!-- APP SCREEN (hidden until authenticated) -->
+<div id="appScreen" style="display:none">
+
+<div class="app-header">
+  <h1>Flow Blocks</h1>
+  <p>Energy-first time blocking — built for the ADHD brain</p>
+  <button class="sign-out-btn" id="signOutBtn" style="margin-top:10px">Sign Out</button>
+</div>
+
+<div class="tabs">
+  <button class="tab-btn active">Today</button>
+  <button class="tab-btn">Week</button>
+  <button class="tab-btn">Pomodoro</button>
+  <button class="tab-btn">Brain Tips</button>
+</div>
+
+<!-- DAY VIEW -->
+<div class="view active" id="day-view">
+  <div class="day-controls">
+    <div class="energy-check">
+      <label>Energy right now:</label>
+      <input type="range" class="energy-slider" min="1" max="10" value="5" id="energySlider">
+      <span class="energy-val" id="energyVal">5</span>
+    </div>
+    <button class="add-block-btn" id="addBlockBtn">+ Add Block</button>
+  </div>
+
+  <div class="timeline" id="timeline"></div>
+
+  <div class="done-list-section" id="doneSection" style="display:none">
+    <h3>What you actually did today</h3>
+    <div id="doneList"></div>
+    <div class="done-count" id="doneCount"></div>
+  </div>
+</div>
+
+<!-- WEEK VIEW -->
+<div class="view" id="week-view">
+  <div class="week-grid" id="weekGrid"></div>
+</div>
+
+<!-- POMODORO VIEW -->
+<div class="view" id="pomo-view">
+  <div class="pomo-view">
+    <div class="pomo-modes">
+      <button class="pomo-mode-btn active">Focus</button>
+      <button class="pomo-mode-btn">Short Break</button>
+      <button class="pomo-mode-btn">Long Break</button>
+    </div>
+
+    <div class="pomo-ring-container">
+      <svg class="pomo-ring-bg" viewBox="0 0 280 280"><circle cx="140" cy="140" r="124"/></svg>
+      <svg class="pomo-ring-progress" viewBox="0 0 280 280"><circle id="pomoRing" cx="140" cy="140" r="124"/></svg>
+      <div class="pomo-time">
+        <div class="pomo-digits" id="pomoDigits">25:00</div>
+        <div class="pomo-phase-label" id="pomoPhase">Focus time</div>
+      </div>
+    </div>
+
+    <div class="pomo-controls">
+      <button class="pomo-btn" id="pomoResetBtn" title="Reset">↺</button>
+      <button class="pomo-btn primary" id="pomoPlayBtn">▶</button>
+      <button class="pomo-btn" id="pomoSkipBtn" title="Skip to next">⏭</button>
+    </div>
+
+    <div class="pomo-stats">
+      <div class="pomo-stat">
+        <div class="pomo-stat-val" id="pomoCount">0</div>
+        <div class="pomo-stat-label">Pomodoros</div>
+      </div>
+      <div class="pomo-stat">
+        <div class="pomo-stat-val" id="pomoFocusMin">0</div>
+        <div class="pomo-stat-label">Focus min</div>
+      </div>
+      <div class="pomo-stat">
+        <div class="pomo-stat-val" id="pomoStreak">0</div>
+        <div class="pomo-stat-label">Streak</div>
+      </div>
+    </div>
+
+    <div class="pomo-settings">
+      <h4>Timer settings</h4>
+      <div class="pomo-setting-row">
+        <label>Focus duration (min)</label>
+        <input type="number" id="pomoFocusDur" value="25" min="1" max="120">
+      </div>
+      <div class="pomo-setting-row">
+        <label>Short break (min)</label>
+        <input type="number" id="pomoShortDur" value="5" min="1" max="30">
+      </div>
+      <div class="pomo-setting-row">
+        <label>Long break (min)</label>
+        <input type="number" id="pomoLongDur" value="15" min="1" max="60">
+      </div>
+      <div class="pomo-setting-row">
+        <label>Long break after</label>
+        <input type="number" id="pomoLongAfter" value="4" min="2" max="10">
+      </div>
+      <div class="pomo-setting-row">
+        <label>Sound alert</label>
+        <button class="pomo-sound-toggle on" id="pomoSoundBtn">On</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TIPS VIEW -->
+<div class="view" id="tips-view">
+  <div class="tips-view">
+    <div class="tip-card">
+      <h3><span class="tip-icon">🧠</span> Energy-first, not time-first</h3>
+      <p>Your brain doesn't run on a clock — it runs on energy and interest. Schedule block <em>types</em> (deep focus, light tasks, admin) rather than specific tasks. When you arrive at a block, pick from your menu based on what your brain can actually handle right now.</p>
+    </div>
+    <div class="tip-card">
+      <h3><span class="tip-icon">🚪</span> Transition buffers are airlocks</h3>
+      <p>Task-switching with ADHD is like turning a cargo ship — it takes time. Those 10-15 minute buffers between blocks aren't wasted time; they're the space your brain needs to let go of one thing and gear up for the next. Protect them fiercely.</p>
+    </div>
+    <div class="tip-card">
+      <h3><span class="tip-icon">🍽️</span> The menu approach</h3>
+      <p>Give yourself 2-3 task options per block. "Deep focus: write report OR organize files OR research project." Your brain gets autonomy and novelty, which makes engagement way more likely than a single rigid assignment.</p>
+    </div>
+    <div class="tip-card">
+      <h3><span class="tip-icon">⚓</span> Anchor, don't chain</h3>
+      <p>Pick 2-3 non-negotiable anchors for your day (morning review, one deep block, wind-down). Let everything else flex around those. Fewer rigid commitments = less guilt when things shift, which they will. And that's fine.</p>
+    </div>
+    <div class="tip-card">
+      <h3><span class="tip-icon">✅</span> Track what you DID, not just what you planned</h3>
+      <p>ADHD brains chronically undercount their output. The "done list" at the bottom of your day view exists for this reason. Mark things complete as you go — you'll be surprised how much you actually accomplish.</p>
+    </div>
+    <div class="tip-card">
+      <h3><span class="tip-icon">🔋</span> Low energy ≠ lazy</h3>
+      <p>Some days your battery is at 30%. That's data, not a character flaw. On low-energy days, lean into light tasks and admin. Trying to force deep focus when you're depleted just creates shame spirals. Respect the battery level.</p>
+    </div>
+    <div class="tip-card">
+      <h3><span class="tip-icon">🔄</span> The "good enough" schedule</h3>
+      <p>Perfectionism kills ADHD productivity systems. If you followed 60% of your plan, that's a win. The goal isn't robotic adherence — it's gentle structure that catches you when executive function dips.</p>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <h2 id="modalTitle">Add Flow Block</h2>
+    <div class="form-group">
+      <label>Block type</label>
+      <div class="type-options">
+        <button class="type-option" data-type="deep"><span class="type-dot" style="background:var(--deep)"></span>Deep Focus</button>
+        <button class="type-option" data-type="light"><span class="type-dot" style="background:var(--light)"></span>Light Tasks</button>
+        <button class="type-option" data-type="admin"><span class="type-dot" style="background:var(--admin)"></span>Admin</button>
+        <button class="type-option" data-type="recharge"><span class="type-dot" style="background:var(--recharge)"></span>Recharge</button>
+        <button class="type-option" data-type="flex"><span class="type-dot" style="background:var(--flex)"></span>Flex</button>
+        <button class="type-option" data-type="buffer"><span class="type-dot" style="background:var(--border)"></span>Buffer</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Title (or leave blank to decide later)</label>
+      <input type="text" id="blockTitle" placeholder="e.g. Morning deep work">
+    </div>
+    <div class="form-group">
+      <label>Menu options — what could you do in this block? (one per line)</label>
+      <textarea id="blockMenu" placeholder="Write project proposal&#10;Organize research notes&#10;Review pull requests"></textarea>
+    </div>
+    <div class="form-group" style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px">
+      <div>
+        <label>Start time</label>
+        <select id="blockStart"></select>
+      </div>
+      <div>
+        <label>Duration (minutes)</label>
+        <select id="blockDuration">
+          <option value="15">15 min</option>
+          <option value="25">25 min (pomodoro)</option>
+          <option value="30">30 min</option>
+          <option value="45">45 min</option>
+          <option value="60" selected>60 min</option>
+          <option value="90">90 min</option>
+          <option value="120">2 hours</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Schedule</label>
+      <div class="sched-toggle">
+        <button class="sched-btn selected" id="schedToday">One-off</button>
+        <button class="sched-btn" id="schedRecurring">Recurring</button>
+      </div>
+      <div id="datePickerGroup" style="margin-top:10px">
+        <label style="font-size:0.8rem;opacity:0.7">Date</label>
+        <input type="date" id="blockDate">
+      </div>
+      <div id="dayPickersGroup" style="display:none;margin-top:10px">
+        <label style="font-size:0.8rem;opacity:0.7">Repeat on</label>
+        <div style="display:flex; gap:6px; flex-wrap:wrap" id="dayPickers"></div>
+      </div>
+    </div>
+    <div class="modal-buttons">
+      <button class="btn btn-danger" id="deleteBtn" style="display:none;margin-right:auto">Delete</button>
+      <button class="btn btn-ghost" id="cancelBtn">Cancel</button>
+      <button class="btn btn-primary" id="saveBtn">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="save-banner" id="saveBanner">Changes saved</div>
+
+</div><!-- /appScreen -->
+
+<script type="module" src="/src/app.ts"></script>
+</body>
+</html>

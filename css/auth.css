@@ -1,0 +1,72 @@
+.auth-screen {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 80vh;
+}
+
+.auth-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 36px 32px;
+  max-width: 380px;
+  width: 100%;
+}
+
+.auth-card h2 {
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin-bottom: 6px;
+  background: linear-gradient(135deg, #7c6ff7, #38bdf8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.auth-card .auth-subtitle {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  margin-bottom: 24px;
+}
+
+.auth-card .form-group {
+  margin-bottom: 14px;
+}
+
+.auth-error {
+  display: none;
+  font-size: 0.8rem;
+  color: var(--danger);
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: rgba(239, 68, 68, 0.08);
+  border-radius: 8px;
+}
+
+.auth-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.auth-buttons .btn {
+  flex: 1;
+  text-align: center;
+}
+
+.sign-out-btn {
+  padding: 5px 14px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.sign-out-btn:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}

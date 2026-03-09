@@ -1,0 +1,72 @@
+.week-grid {
+  display: grid;
+  grid-template-columns: 70px repeat(7, 1fr);
+  gap: 4px;
+  max-width: 1100px;
+  margin: 0 auto;
+  overflow-x: auto;
+}
+
+.week-header {
+  text-align: center;
+  padding: 10px 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.week-header.today { color: var(--accent); }
+
+.week-time-label {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  text-align: right;
+  padding: 6px 8px 6px 0;
+  min-height: 44px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+}
+
+.week-cell {
+  min-height: 44px;
+  background: var(--surface);
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+  padding: 4px 6px;
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  position: relative;
+  overflow: hidden;
+}
+
+.week-cell:hover { border-color: var(--accent); }
+
+.week-cell.filled::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+}
+
+.week-cell.filled.type-deep::before { background: var(--deep); }
+.week-cell.filled.type-light::before { background: var(--light); }
+.week-cell.filled.type-admin::before { background: var(--admin); }
+.week-cell.filled.type-recharge::before { background: var(--recharge); }
+.week-cell.filled.type-flex::before { background: var(--flex); }
+
+.week-cell.filled { background: var(--surface2); }
+
+.week-cell-label {
+  font-weight: 500;
+  font-size: 0.7rem;
+  color: var(--text);
+}
+
+@media (max-width: 768px) {
+  .week-grid { grid-template-columns: 50px repeat(7, 1fr); font-size: 0.65rem; }
+}
