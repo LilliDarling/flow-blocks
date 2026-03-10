@@ -9,6 +9,23 @@ export const TYPE_LABELS: Record<BlockType, string> = {
   buffer: 'Buffer',
 };
 
+/** Energy ranges where each block type is a good fit: [min, max] inclusive (1-10 scale). */
+export const ENERGY_FIT: Record<BlockType, [number, number]> = {
+  deep:     [7, 10],
+  light:    [4, 7],
+  admin:    [2, 5],
+  recharge: [1, 4],
+  flex:     [1, 10],
+  buffer:   [1, 10],
+};
+
+/** Suggestion messages keyed by energy tier. */
+export function energySuggestion(energy: number): string {
+  if (energy <= 3) return 'Low battery — lean into recharge or admin blocks. No shame in a slow start.';
+  if (energy <= 6) return 'Moderate energy — light tasks and admin are your sweet spot right now.';
+  return 'High energy — great time for deep focus. Ride the wave!';
+}
+
 export type BlockType = 'deep' | 'light' | 'admin' | 'recharge' | 'flex' | 'buffer';
 export type BlockStatus = 'pending' | 'done' | 'skipped';
 
@@ -60,6 +77,13 @@ export interface CompletionRow {
   block_id: string;
   completion_date: string;
   status: string;
+}
+
+export interface EnergyLogRow {
+  id: string;
+  user_id: string;
+  value: number;
+  logged_at: string;
 }
 
 export interface DoneItemRow {

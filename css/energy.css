@@ -1,0 +1,77 @@
+.energy-analytics {
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.energy-analytics h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.energy-analytics-sub {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin-bottom: 20px;
+}
+
+.energy-bar-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 180px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
+}
+
+.energy-bar-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  min-width: 0;
+}
+
+.energy-bar {
+  width: 100%;
+  max-width: 36px;
+  border-radius: 4px 4px 0 0;
+  min-height: 4px;
+  transition: height 0.3s;
+}
+
+.energy-bar-value {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.energy-bar-label {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  margin-top: 6px;
+}
+
+.energy-insights {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.energy-insight {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.energy-insight strong {
+  color: var(--text);
+}

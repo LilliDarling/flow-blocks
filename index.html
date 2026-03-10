@@ -14,6 +14,8 @@
   <link rel="stylesheet" href="css/week.css">
   <link rel="stylesheet" href="css/pomodoro.css">
   <link rel="stylesheet" href="css/modal.css">
+  <link rel="stylesheet" href="css/energy.css">
+  <link rel="stylesheet" href="css/calendar.css">
   <link rel="stylesheet" href="css/tips.css">
   <link rel="stylesheet" href="css/auth.css">
 </head>
@@ -46,13 +48,32 @@
 <div class="app-header">
   <h1>Flow Blocks</h1>
   <p>Energy-first time blocking — built for the ADHD brain</p>
-  <button class="sign-out-btn" id="signOutBtn" style="margin-top:10px">Sign Out</button>
+  <div class="header-actions">
+    <button class="header-btn" id="calendarSettingsBtn">Calendars</button>
+    <button class="sign-out-btn" id="signOutBtn">Sign Out</button>
+  </div>
+</div>
+
+<!-- CALENDAR SETTINGS PANEL -->
+<div class="cal-panel" id="calPanel" style="display:none">
+  <div class="cal-panel-inner">
+    <div class="cal-panel-header">
+      <h3>Calendar Connections</h3>
+      <button class="cal-panel-close" id="calPanelClose">&times;</button>
+    </div>
+    <div id="calConnections"></div>
+    <div class="cal-add-providers">
+      <p class="cal-add-label">Connect a calendar:</p>
+      <div id="calProviderButtons"></div>
+    </div>
+  </div>
 </div>
 
 <div class="tabs">
   <button class="tab-btn active">Today</button>
   <button class="tab-btn">Week</button>
   <button class="tab-btn">Pomodoro</button>
+  <button class="tab-btn">Energy</button>
   <button class="tab-btn">Brain Tips</button>
 </div>
 
@@ -67,6 +88,7 @@
     <button class="add-block-btn" id="addBlockBtn">+ Add Block</button>
   </div>
 
+  <div class="energy-suggestion" id="energySuggestion"></div>
   <div class="timeline" id="timeline"></div>
 
   <div class="done-list-section" id="doneSection" style="display:none">
@@ -143,6 +165,16 @@
         <button class="pomo-sound-toggle on" id="pomoSoundBtn">On</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- ENERGY ANALYTICS VIEW -->
+<div class="view" id="energy-view">
+  <div class="energy-analytics">
+    <h3>Your Energy Patterns</h3>
+    <p class="energy-analytics-sub">Based on the last 14 days of check-ins</p>
+    <div class="energy-chart" id="energyChart"></div>
+    <div class="energy-insights" id="energyInsights"></div>
   </div>
 </div>
 
@@ -240,6 +272,21 @@
       <button class="btn btn-danger" id="deleteBtn" style="display:none;margin-right:auto">Delete</button>
       <button class="btn btn-ghost" id="cancelBtn">Cancel</button>
       <button class="btn btn-primary" id="saveBtn">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- CALENDAR SYNC DIALOG -->
+<div class="modal-overlay" id="calSyncModal">
+  <div class="modal" style="max-width:520px">
+    <h2>Calendar Sync</h2>
+    <p style="font-size:0.82rem;color:var(--text-dim);margin-bottom:16px">
+      New events found — choose buffers and review any conflicts.
+    </p>
+    <div id="calSyncItems"></div>
+    <div class="modal-buttons">
+      <button class="btn btn-ghost" id="calSyncSkip">Skip all</button>
+      <button class="btn btn-primary" id="calSyncApply">Apply</button>
     </div>
   </div>
 </div>

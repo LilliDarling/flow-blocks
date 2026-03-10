@@ -1,22 +1,47 @@
 import { state } from './state.js';
-import { fmtTime, addMinutes, getTodayIndex, getTodayDate, TYPE_LABELS, BlockStatus, $id } from './utils.js';
+import { fmtTime, addMinutes, getTodayIndex, getTodayDate, TYPE_LABELS, BlockStatus, ENERGY_FIT, FlowBlock, $id } from './utils.js';
 import { openModal } from './modal.js';
+import type { CalendarEvent } from './calendar/types.js';
+
+/** A unified item for timeline rendering — either a flow block or a calendar event. */
+type TimelineItem =
+  | { kind: 'block'; block: FlowBlock; index: number }
+  | { kind: 'event'; event: CalendarEvent };
 
 export function renderTimeline(): void {
   const tl = $id('timeline');
   const dayIndex = getTodayIndex();
   const today = getTodayDate();
-  const dayBlocks = state.blocks
+
+  // Gather flow blocks for today
+  const dayBlocks: TimelineItem[] = state.blocks
     .filter(b => {
       if (b.date) return b.date === today;
       if (!b.days.includes(dayIndex)) return false;
-      // Recurring blocks only show from their creation date forward
       if (b.created_at && today < b.created_at.slice(0, 10)) return false;
       return true;
     })
-    .sort((a, b) => a.start.localeCompare(b.start));
+    .map(b => ({ kind: 'block' as const, block: b, index: state.blocks.indexOf(b) }));
 
-  if (dayBlocks.length === 0) {
+  // Gather calendar events (skip all-day events from the main timeline)
+  const calEvents: TimelineItem[] = state.calendarEvents
+    .filter(e => !e.allDay)
+    .map(e => ({ kind: 'event' as const, event: e }));
+
+  // Merge and sort by start time; buffer blocks sort before other blocks at the same time
+  const items: TimelineItem[] = [...dayBlocks, ...calEvents]
+    .sort((a, b) => {
+      const aStart = a.kind === 'block' ? a.block.start : a.event.start;
+      const bStart = b.kind === 'block' ? b.block.start : b.event.start;
+      const cmp = aStart.localeCompare(bStart);
+      if (cmp !== 0) return cmp;
+      // At same time: calendar events first, then buffers, then other blocks
+      const aOrder = a.kind === 'event' ? 0 : a.block.type === 'buffer' ? 1 : 2;
+      const bOrder = b.kind === 'event' ? 0 : b.block.type === 'buffer' ? 1 : 2;
+      return aOrder - bOrder;
+    });
+
+  if (items.length === 0) {
     tl.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-dim)">
       <p style="font-size:1.4rem;margin-bottom:8px">No blocks yet</p>
       <p style="font-size:0.85rem">Hit "+ Add Block" to start building your day</p>
@@ -25,38 +50,70 @@ export function renderTimeline(): void {
     return;
   }
 
-  tl.innerHTML = dayBlocks.map(block => {
-    const realIndex = state.blocks.indexOf(block);
-    const endTime = addMinutes(block.start, block.duration);
-    const menuHtml = block.menu.length
-      ? block.menu.map(m => `<span>${m}</span>`).join('')
-      : '';
-    const effectiveStatus: BlockStatus = state.getEffectiveStatus(block, today);
-    const statusClass =
-      effectiveStatus === 'done' ? 'completed' :
-      effectiveStatus === 'skipped' ? 'skipped' : '';
-
-    return `<div class="time-block">
-      <div class="time-label">${fmtTime(block.start)}</div>
-      <div class="dot"></div>
-      <div class="block-card type-${block.type} ${statusClass}" data-index="${realIndex}">
-        <div class="block-top">
-          <span class="block-type-badge">${TYPE_LABELS[block.type]}</span>
-          <span class="block-duration">${block.duration} min · until ${fmtTime(endTime)}</span>
-        </div>
-        <div class="block-title">${block.title || 'Untitled block'}</div>
-        ${menuHtml ? `<div class="block-menu-items">${menuHtml}</div>` : ''}
-        <div class="block-actions">
-          <button class="block-action-btn done-btn" data-action="done" data-index="${realIndex}">✓ Done</button>
-          <button class="block-action-btn skip-btn" data-action="skip" data-index="${realIndex}">Skip</button>
-          <button class="block-action-btn" data-action="edit" data-index="${realIndex}">Edit</button>
-          <button class="block-action-btn delete-btn" data-action="delete" data-index="${realIndex}">Delete</button>
-        </div>
-      </div>
-    </div>`;
+  tl.innerHTML = items.map(item => {
+    if (item.kind === 'event') return renderCalendarEvent(item.event);
+    return renderFlowBlock(item.block, item.index, today);
   }).join('');
 
   renderDoneList();
+}
+
+function renderFlowBlock(block: FlowBlock, realIndex: number, today: string): string {
+  const endTime = addMinutes(block.start, block.duration);
+  const menuHtml = block.menu.length
+    ? block.menu.map(m => `<span>${m}</span>`).join('')
+    : '';
+  const effectiveStatus: BlockStatus = state.getEffectiveStatus(block, today);
+  const statusClass =
+    effectiveStatus === 'done' ? 'completed' :
+    effectiveStatus === 'skipped' ? 'skipped' : '';
+  const energy = state.energy;
+  const [eMin, eMax] = ENERGY_FIT[block.type];
+  const energyClass = effectiveStatus !== 'pending' ? '' :
+    (energy >= eMin && energy <= eMax) ? 'energy-match' : 'energy-dim';
+
+  return `<div class="time-block">
+    <div class="time-label">${fmtTime(block.start)}</div>
+    <div class="dot"></div>
+    <div class="block-card type-${block.type} ${statusClass} ${energyClass}" data-index="${realIndex}">
+      <div class="block-top">
+        <span class="block-type-badge">${TYPE_LABELS[block.type]}</span>
+        <span class="block-duration">${block.duration} min · until ${fmtTime(endTime)}</span>
+      </div>
+      <div class="block-title">${block.title || 'Untitled block'}</div>
+      ${menuHtml ? `<div class="block-menu-items">${menuHtml}</div>` : ''}
+      <div class="block-actions">
+        <button class="block-action-btn done-btn" data-action="done" data-index="${realIndex}">Done</button>
+        <button class="block-action-btn skip-btn" data-action="skip" data-index="${realIndex}">Skip</button>
+        <button class="block-action-btn" data-action="edit" data-index="${realIndex}">Edit</button>
+        <button class="block-action-btn delete-btn" data-action="delete" data-index="${realIndex}">Delete</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function calColorClass(title: string): string {
+  let hash = 0;
+  for (let i = 0; i < title.length; i++) {
+    hash = ((hash << 5) - hash + title.charCodeAt(i)) | 0;
+  }
+  return `cal-color-${Math.abs(hash) % 8}`;
+}
+
+function renderCalendarEvent(event: CalendarEvent): string {
+  const color = calColorClass(event.title);
+  return `<div class="time-block">
+    <div class="time-label">${fmtTime(event.start)}</div>
+    <div class="dot"></div>
+    <div class="block-card calendar-event ${color}">
+      <div class="block-top">
+        <span class="block-type-badge">${event.provider}</span>
+        <span class="block-duration">${event.duration} min · until ${fmtTime(event.end)}</span>
+      </div>
+      <div class="block-title">${event.title}</div>
+      <div class="cal-source-label">from ${event.provider} calendar</div>
+    </div>
+  </div>`;
 }
 
 function renderDoneList(): void {

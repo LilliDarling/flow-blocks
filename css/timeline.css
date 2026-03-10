@@ -46,6 +46,40 @@
   text-align: center;
 }
 
+.energy-suggestion {
+  max-width: 700px;
+  margin: 0 auto 14px;
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  font-size: 0.82rem;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-dim);
+  transition: all 0.3s;
+}
+
+.energy-suggestion.low { border-color: #ef4444; color: #ef4444; }
+.energy-suggestion.mid { border-color: #f59e0b; color: #f59e0b; }
+.energy-suggestion.high { border-color: #34d399; color: #34d399; }
+
+.block-card.energy-match {
+  box-shadow: 0 0 12px rgba(124, 111, 247, 0.3);
+  border-color: var(--accent);
+}
+
+.block-card.energy-match .block-type-badge::after {
+  content: ' — good fit';
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  opacity: 0.7;
+}
+
+.block-card.energy-dim {
+  opacity: 0.45;
+}
+
 .add-block-btn {
   padding: 8px 16px;
   border-radius: 20px;

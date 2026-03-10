@@ -1,4 +1,4 @@
-const CACHE_NAME = 'flowblocks-v1';
+const CACHE_NAME = 'flowblocks-v2';
 const PRECACHE = [
   '/',
   '/css/base.css',
@@ -32,6 +32,12 @@ self.addEventListener('fetch', (e) => {
 
   // Always go to network for Supabase API calls
   if (url.hostname.includes('supabase')) return;
+
+  // Let OAuth callback navigations pass through to the server
+  if (url.pathname.startsWith('/auth/')) return;
+
+  // Let Google API calls pass through
+  if (url.hostname.includes('googleapis.com')) return;
 
   e.respondWith(
     fetch(e.request)

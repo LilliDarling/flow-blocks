@@ -1,9 +1,13 @@
 import { supabase } from './supabase.js';
 import {
   FlowBlock, DoneItem, PomoMode, PomoSettings,
-  BlockStatus, CompletionRow,
+  BlockStatus, CompletionRow, EnergyLogRow,
   blockFromRow, doneItemFromRow, getTodayDate,
 } from './utils.js';
+import {
+  CalendarEvent, CalendarConnection,
+  loadConnections, fetchAllEvents, disconnectCalendar, checkOAuthRedirect,
+} from './calendar/index.js';
 
 export interface PomoState {
   mode: PomoMode;
@@ -22,6 +26,10 @@ class AppState {
   blocks: FlowBlock[] = [];
   doneItems: DoneItem[] = [];
   completions: Map<string, BlockStatus> = new Map(); // "blockId_YYYY-MM-DD" -> status
+  energy = 5;
+  energyLogs: EnergyLogRow[] = [];
+  calendarConnections: CalendarConnection[] = [];
+  calendarEvents: CalendarEvent[] = [];
   editingIndex = -1;
   selectedType = '';
   selectedDays: number[] = [];
@@ -65,6 +73,12 @@ class AppState {
         this.completions.set(`${row.block_id}_${row.completion_date}`, row.status as BlockStatus);
       }
     }
+
+    // Fetch energy logs (last 14 days for analytics)
+    await this.loadEnergyLogs();
+
+    // Load calendar connections + events
+    await this.loadCalendar();
 
     // Fetch done items (today only)
     const todayStart = new Date();
@@ -184,6 +198,61 @@ class AppState {
         );
       this.completions.set(`${existing.id}_${today}`, status);
     }
+  }
+
+  // --- Calendar ---
+
+  async loadCalendar(): Promise<void> {
+    if (!this.userId) return;
+    this.calendarConnections = await loadConnections(this.userId);
+    if (this.calendarConnections.length > 0) {
+      const today = getTodayDate();
+      this.calendarEvents = await fetchAllEvents(this.calendarConnections, today);
+    }
+  }
+
+  async checkCalendarRedirect(): Promise<boolean> {
+    if (!this.userId) return false;
+    const conn = await checkOAuthRedirect(this.userId);
+    if (conn) {
+      this.calendarConnections.push(conn);
+      await this.loadCalendar();
+      return true;
+    }
+    return false;
+  }
+
+  async removeCalendarConnection(connectionId: string): Promise<void> {
+    await disconnectCalendar(connectionId);
+    this.calendarConnections = this.calendarConnections.filter(c => c.id !== connectionId);
+    // Re-fetch events without that connection
+    const today = getTodayDate();
+    this.calendarEvents = this.calendarConnections.length > 0
+      ? await fetchAllEvents(this.calendarConnections, today)
+      : [];
+  }
+
+  // --- Energy logging ---
+
+  async logEnergy(value: number): Promise<void> {
+    const { data } = await supabase
+      .from('energy_logs')
+      .insert({ user_id: this.userId, value })
+      .select()
+      .single();
+    if (data) this.energyLogs.push(data as EnergyLogRow);
+  }
+
+  async loadEnergyLogs(days: number = 14): Promise<void> {
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+    const { data } = await supabase
+      .from('energy_logs')
+      .select('*')
+      .eq('user_id', this.userId)
+      .gte('logged_at', since.toISOString())
+      .order('logged_at');
+    this.energyLogs = (data || []) as EnergyLogRow[];
   }
 
   // --- Done items ---

@@ -1,13 +1,16 @@
 import { state } from './state.js';
-import { $id } from './utils.js';
+import { $id, energySuggestion } from './utils.js';
 import { renderTimeline, initTimelineEvents } from './timeline.js';
 import { renderWeek, initWeekEvents } from './week.js';
+import { renderEnergyAnalytics } from './energy.js';
 import { openModal, initModalEvents } from './modal.js';
 import { initPomodoro } from './pomodoro.js';
 import { initAuth, onAuth } from './auth.js';
+import { initCalendarUI } from './calendar/ui.js';
+import { showCalendarSyncDialog } from './calendar/sync.js';
 
-type TabName = 'day' | 'week' | 'pomo' | 'tips';
-const TAB_ORDER: TabName[] = ['day', 'week', 'pomo', 'tips'];
+type TabName = 'day' | 'week' | 'pomo' | 'energy' | 'tips';
+const TAB_ORDER: TabName[] = ['day', 'week', 'pomo', 'energy', 'tips'];
 
 function switchTab(tab: TabName): void {
   document.querySelectorAll('.tab-btn').forEach((btn, i) => {
@@ -18,15 +21,39 @@ function switchTab(tab: TabName): void {
 
   if (tab === 'day') renderTimeline();
   if (tab === 'week') renderWeek();
+  if (tab === 'energy') renderEnergyAnalytics();
 }
 
-function updateEnergy(val: string): void {
+function updateEnergyUI(val: string): void {
+  const v = parseInt(val);
+  state.energy = v;
+
+  // Update value display
   const el = $id('energyVal');
   el.textContent = val;
-  const v = parseInt(val);
   if (v <= 3) el.style.color = '#ef4444';
   else if (v <= 6) el.style.color = '#f59e0b';
   else el.style.color = '#34d399';
+
+  // Update suggestion banner
+  const banner = $id('energySuggestion');
+  banner.textContent = energySuggestion(v);
+  banner.className = 'energy-suggestion ' + (v <= 3 ? 'low' : v <= 6 ? 'mid' : 'high');
+
+  // Re-render timeline so block highlights update
+  renderTimeline();
+}
+
+let energyLogTimeout: ReturnType<typeof setTimeout> | null = null;
+let lastLoggedEnergy: number | null = null;
+function logEnergy(value: number): void {
+  if (energyLogTimeout) clearTimeout(energyLogTimeout);
+  energyLogTimeout = setTimeout(() => {
+    if (value !== lastLoggedEnergy) {
+      lastLoggedEnergy = value;
+      state.logEnergy(value);
+    }
+  }, 2000);
 }
 
 function initUI(): void {
@@ -35,10 +62,11 @@ function initUI(): void {
     btn.addEventListener('click', () => switchTab(TAB_ORDER[i]));
   });
 
-  // Energy slider
+  // Energy slider — 'input' for live UI updates, 'change' for DB logging
   const slider = $id('energySlider') as HTMLInputElement;
-  slider.addEventListener('input', () => updateEnergy(slider.value));
-  updateEnergy(slider.value);
+  slider.addEventListener('input', () => updateEnergyUI(slider.value));
+  slider.addEventListener('change', () => logEnergy(parseInt(slider.value)));
+  updateEnergyUI(slider.value);
 
   // Add block button
   $id('addBlockBtn').addEventListener('click', () => openModal());
@@ -48,6 +76,7 @@ function initUI(): void {
   initWeekEvents();
   initModalEvents();
   initPomodoro();
+  initCalendarUI();
 }
 
 let uiInitialized = false;
@@ -60,7 +89,15 @@ async function onUserSignedIn(userId: string): Promise<void> {
     uiInitialized = true;
   }
 
+  // Check if we're returning from a calendar OAuth redirect
+  const wasRedirect = await state.checkCalendarRedirect();
+
   renderTimeline();
+
+  // Show sync dialog if there are calendar events to review
+  if (state.calendarEvents.length > 0) {
+    showCalendarSyncDialog();
+  }
 }
 
 // Register service worker for PWA
