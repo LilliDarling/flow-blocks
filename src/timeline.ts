@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { fmtTime, addMinutes, getTodayIndex, getTodayDate, TYPE_LABELS, $id } from './utils.js';
+import { fmtTime, addMinutes, getTodayIndex, getTodayDate, TYPE_LABELS, BlockStatus, $id } from './utils.js';
 import { openModal } from './modal.js';
 
 export function renderTimeline(): void {
@@ -31,9 +31,10 @@ export function renderTimeline(): void {
     const menuHtml = block.menu.length
       ? block.menu.map(m => `<span>${m}</span>`).join('')
       : '';
+    const effectiveStatus: BlockStatus = state.getEffectiveStatus(block, today);
     const statusClass =
-      block.status === 'done' ? 'completed' :
-      block.status === 'skipped' ? 'skipped' : '';
+      effectiveStatus === 'done' ? 'completed' :
+      effectiveStatus === 'skipped' ? 'skipped' : '';
 
     return `<div class="time-block">
       <div class="time-label">${fmtTime(block.start)}</div>

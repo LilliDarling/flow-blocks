@@ -55,6 +55,13 @@ export interface BlockRow {
   created_at: string;
 }
 
+export interface CompletionRow {
+  id: string;
+  block_id: string;
+  completion_date: string;
+  status: string;
+}
+
 export interface DoneItemRow {
   id: string;
   user_id: string;

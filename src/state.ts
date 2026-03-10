@@ -1,8 +1,8 @@
 import { supabase } from './supabase.js';
 import {
   FlowBlock, DoneItem, PomoMode, PomoSettings,
-  BlockStatus,
-  blockFromRow, doneItemFromRow,
+  BlockStatus, CompletionRow,
+  blockFromRow, doneItemFromRow, getTodayDate,
 } from './utils.js';
 
 export interface PomoState {
@@ -21,6 +21,7 @@ export interface PomoState {
 class AppState {
   blocks: FlowBlock[] = [];
   doneItems: DoneItem[] = [];
+  completions: Map<string, BlockStatus> = new Map(); // "blockId_YYYY-MM-DD" -> status
   editingIndex = -1;
   selectedType = '';
   selectedDays: number[] = [];
@@ -49,6 +50,21 @@ class AppState {
       .eq('user_id', userId)
       .order('start_time');
     this.blocks = (blockRows || []).map(blockFromRow);
+
+    // Fetch today's completions for recurring blocks
+    const today = getTodayDate();
+    const recurringIds = this.blocks.filter(b => !b.date && b.id).map(b => b.id!);
+    if (recurringIds.length > 0) {
+      const { data: compRows } = await supabase
+        .from('block_completions')
+        .select('*')
+        .in('block_id', recurringIds)
+        .eq('completion_date', today);
+      this.completions.clear();
+      for (const row of (compRows || []) as CompletionRow[]) {
+        this.completions.set(`${row.block_id}_${row.completion_date}`, row.status as BlockStatus);
+      }
+    }
 
     // Fetch done items (today only)
     const todayStart = new Date();
@@ -140,12 +156,34 @@ class AppState {
     this.showSaveBanner();
   }
 
+  /** Get the effective status for a block on a given date. */
+  getEffectiveStatus(block: FlowBlock, date: string): BlockStatus {
+    // One-off blocks use their own status field directly
+    if (block.date) return block.status;
+    // Recurring blocks check the completions map
+    const key = `${block.id}_${date}`;
+    return this.completions.get(key) || 'pending';
+  }
+
   async updateBlockStatus(index: number, status: BlockStatus): Promise<void> {
     const existing = this.blocks[index];
     if (!existing?.id) return;
 
-    await supabase.from('blocks').update({ status }).eq('id', existing.id);
-    this.blocks[index].status = status;
+    if (existing.date) {
+      // One-off block: update the block row directly (original behavior)
+      await supabase.from('blocks').update({ status }).eq('id', existing.id);
+      this.blocks[index].status = status;
+    } else {
+      // Recurring block: upsert into block_completions for today
+      const today = getTodayDate();
+      await supabase
+        .from('block_completions')
+        .upsert(
+          { block_id: existing.id, completion_date: today, status },
+          { onConflict: 'block_id,completion_date' }
+        );
+      this.completions.set(`${existing.id}_${today}`, status);
+    }
   }
 
   // --- Done items ---
