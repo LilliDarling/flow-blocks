@@ -347,6 +347,15 @@ function toggle(): void {
     stopTicking();
     pomo.running = false;
   } else {
+    // Sync settings from inputs before starting a fresh session
+    if (pomo.secondsLeft === pomo.totalSeconds) {
+      syncSettingsFromInputs();
+      const dur = getDuration(pomo.mode) * 60;
+      if (dur !== pomo.totalSeconds) {
+        pomo.totalSeconds = dur;
+        pomo.secondsLeft = dur;
+      }
+    }
     // Capture task on first start of a focus session
     if (pomo.mode === 'focus' && pomo.secondsLeft === pomo.totalSeconds) {
       currentTask = ($id('pomoTaskInput') as HTMLInputElement).value.trim();
@@ -457,7 +466,13 @@ export function initPomodoro(): void {
   soundBtn.textContent = soundOn ? 'On' : 'Off';
   soundBtn.classList.toggle('on', soundOn);
 
-  // Restore timer if one was active
+  // Sync totalSeconds from settings (default pomo state has hardcoded 25*60)
+  if (!state.pomo.running) {
+    state.pomo.totalSeconds = getDuration(state.pomo.mode) * 60;
+    state.pomo.secondsLeft = state.pomo.totalSeconds;
+  }
+
+  // Restore timer if one was active (overrides the above if a session was in progress)
   restoreTimer();
 
   // Wire events
@@ -480,7 +495,10 @@ export function initPomodoro(): void {
   });
 
   document.querySelectorAll('#pomoFocusDur, #pomoShortDur, #pomoLongDur, #pomoLongAfter')
-    .forEach(input => input.addEventListener('change', updateSettings));
+    .forEach(input => {
+      input.addEventListener('change', updateSettings);
+      input.addEventListener('input', updateSettings);
+    });
 
   // Recalculate timer when app returns from background
   document.addEventListener('visibilitychange', onVisibilityChange);
