@@ -40,6 +40,7 @@ export interface FlowBlock {
   date: string | null; // "YYYY-MM-DD" for one-off, null for recurring
   status: BlockStatus;
   created_at?: string; // ISO timestamp from DB
+  linked_event_id?: string | null; // calendar event ID this buffer is linked to
 }
 
 export interface DoneItem {
@@ -70,6 +71,7 @@ export interface BlockRow {
   block_date: string | null;
   status: string;
   created_at: string;
+  linked_event_id: string | null;
 }
 
 export interface CompletionRow {
@@ -118,6 +120,7 @@ export function blockFromRow(row: BlockRow): FlowBlock {
     date: row.block_date,
     status: row.status as BlockStatus,
     created_at: row.created_at,
+    linked_event_id: row.linked_event_id || null,
   };
 }
 

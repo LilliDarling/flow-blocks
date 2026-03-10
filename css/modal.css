@@ -85,3 +85,14 @@
   justify-content: flex-end;
   margin-top: 20px;
 }
+
+@media (max-width: 768px) {
+  .modal {
+    padding: 20px 16px;
+    width: 95%;
+    max-height: 90vh;
+    border-radius: 14px;
+  }
+  .type-options { grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  .type-option { padding: 8px 6px; font-size: 0.72rem; }
+}

@@ -70,5 +70,48 @@
 .save-banner.show { transform: translateX(-50%) translateY(0); }
 
 @media (max-width: 768px) {
-  .timeline { padding-left: 60px; }
+  body { padding: 10px; }
+
+  .app-header { padding: 20px 12px 14px; }
+  .app-header h1 { font-size: 1.4rem; }
+  .app-header p { font-size: 0.8rem; }
+
+  .tabs {
+    overflow-x: auto;
+    justify-content: flex-start;
+    padding: 0 4px;
+    margin: 14px 0 16px;
+    gap: 6px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab-btn {
+    padding: 7px 14px;
+    font-size: 0.78rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .timeline { padding-left: 55px; }
+  .timeline::before { left: 42px; }
+  .time-block .time-label { left: -55px; width: 42px; font-size: 0.68rem; }
+  .time-block .dot { left: -17px; }
+
+  .block-card { padding: 12px 14px; margin-left: 6px; }
+  .block-card .block-actions { display: flex; }
+
+  .day-controls { gap: 8px; }
+  .energy-check {
+    width: 100%;
+    padding: 10px 14px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .energy-slider { flex: 1; min-width: 80px; }
+  .add-block-btn { width: 100%; text-align: center; }
+
+  .energy-suggestion { font-size: 0.78rem; padding: 8px 12px; }
+
+  .done-list-section { padding: 12px 14px; }
 }

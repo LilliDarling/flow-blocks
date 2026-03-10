@@ -8,6 +8,7 @@ import { initPomodoro } from './pomodoro.js';
 import { initAuth, onAuth } from './auth.js';
 import { initCalendarUI } from './calendar/ui.js';
 import { showCalendarSyncDialog } from './calendar/sync.js';
+import { initDragAndDrop } from './drag.js';
 
 type TabName = 'day' | 'week' | 'pomo' | 'energy' | 'tips';
 const TAB_ORDER: TabName[] = ['day', 'week', 'pomo', 'energy', 'tips'];
@@ -73,6 +74,7 @@ function initUI(): void {
 
   // Event listeners for feature modules
   initTimelineEvents();
+  initDragAndDrop();
   initWeekEvents();
   initModalEvents();
   initPomodoro();
@@ -84,9 +86,16 @@ let uiInitialized = false;
 async function onUserSignedIn(userId: string): Promise<void> {
   await state.load(userId);
 
+  // Restore energy slider to last logged value before initUI reads it
+  const slider = $id('energySlider') as HTMLInputElement;
+  slider.value = String(state.energy);
+  lastLoggedEnergy = state.energy;
+
   if (!uiInitialized) {
     initUI();
     uiInitialized = true;
+  } else {
+    updateEnergyUI(slider.value);
   }
 
   // Check if we're returning from a calendar OAuth redirect

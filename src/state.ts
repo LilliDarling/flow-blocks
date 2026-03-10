@@ -22,6 +22,17 @@ export interface PomoState {
   settings: PomoSettings;
 }
 
+function toMin(t: string): number {
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function fromMin(mins: number): string {
+  const h = Math.floor(mins / 60) % 24;
+  const m = mins % 60;
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+}
+
 class AppState {
   blocks: FlowBlock[] = [];
   doneItems: DoneItem[] = [];
@@ -77,6 +88,11 @@ class AppState {
     // Fetch energy logs (last 14 days for analytics)
     await this.loadEnergyLogs();
 
+    // Restore the most recent energy value
+    if (this.energyLogs.length > 0) {
+      this.energy = this.energyLogs[this.energyLogs.length - 1].value;
+    }
+
     // Load calendar connections + events
     await this.loadCalendar();
 
@@ -113,19 +129,22 @@ class AppState {
   // --- Block CRUD ---
 
   async addBlock(block: FlowBlock): Promise<void> {
+    const row: Record<string, unknown> = {
+      user_id: this.userId,
+      type: block.type,
+      title: block.title,
+      menu: block.menu,
+      start_time: block.start,
+      duration: block.duration,
+      days: block.days,
+      block_date: block.date,
+      status: block.status,
+    };
+    if (block.linked_event_id) row.linked_event_id = block.linked_event_id;
+
     const { data, error } = await supabase
       .from('blocks')
-      .insert({
-        user_id: this.userId,
-        type: block.type,
-        title: block.title,
-        menu: block.menu,
-        start_time: block.start,
-        duration: block.duration,
-        days: block.days,
-        block_date: block.date,
-        status: block.status,
-      })
+      .insert(row)
       .select()
       .single();
 
@@ -208,6 +227,42 @@ class AppState {
     if (this.calendarConnections.length > 0) {
       const today = getTodayDate();
       this.calendarEvents = await fetchAllEvents(this.calendarConnections, today);
+      await this.reconcileBuffers();
+    }
+  }
+
+  /** Reconcile linked buffer blocks against current calendar events.
+   *  - Delete buffers whose linked event no longer exists (deleted from calendar)
+   *  - Update buffer times if the linked event's time has changed
+   */
+  private async reconcileBuffers(): Promise<void> {
+    const today = getTodayDate();
+    const eventMap = new Map(this.calendarEvents.map(e => [e.id, e]));
+
+    // Walk backwards so splicing doesn't shift indices
+    for (let i = this.blocks.length - 1; i >= 0; i--) {
+      const block = this.blocks[i];
+      if (!block.linked_event_id || block.date !== today) continue;
+
+      const event = eventMap.get(block.linked_event_id);
+
+      if (!event) {
+        // Event was deleted from calendar — remove the buffer
+        await this.deleteBlock(i);
+        continue;
+      }
+
+      // Event still exists — check if its time changed and update buffer accordingly
+      const evStartMin = toMin(event.start);
+      const evEndMin = toMin(event.end);
+      const isBefore = block.title.startsWith('Buffer before');
+      const expectedStart = isBefore
+        ? fromMin(evStartMin - block.duration)
+        : fromMin(evEndMin);
+
+      if (block.start !== expectedStart) {
+        await this.updateBlock(i, { ...block, start: expectedStart });
+      }
     }
   }
 

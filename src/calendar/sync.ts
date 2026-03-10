@@ -237,6 +237,7 @@ async function applySync(choices: BufferChoice[], _conflicts: Conflict[]): Promi
         days: [],
         date: today,
         status: 'pending',
+        linked_event_id: choice.event.id,
       });
     }
     if (choice.after > 0) {
@@ -249,6 +250,7 @@ async function applySync(choices: BufferChoice[], _conflicts: Conflict[]): Promi
         days: [],
         date: today,
         status: 'pending',
+        linked_event_id: choice.event.id,
       });
     }
   }

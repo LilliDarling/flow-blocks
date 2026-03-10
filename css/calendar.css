@@ -281,3 +281,10 @@
   margin-top: 4px;
   font-style: italic;
 }
+
+@media (max-width: 768px) {
+  .header-actions { gap: 6px; margin-top: 8px; }
+  .header-btn, .sign-out-btn { font-size: 0.75rem; padding: 5px 12px; }
+  .cal-panel-inner { padding: 12px 14px; }
+  .cal-sync-buffers { flex-direction: column; gap: 6px; }
+}
