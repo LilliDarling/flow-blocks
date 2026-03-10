@@ -3,11 +3,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { corsHeaders, handlePreflight } from '../_shared/cors.ts';
 
 interface RefreshConfig {
   tokenUrl: string;
@@ -29,8 +25,10 @@ function getRefreshConfig(provider: string): RefreshConfig | null {
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: CORS_HEADERS });
+    return handlePreflight(req);
   }
+
+  const headers = { ...corsHeaders(req), 'Content-Type': 'application/json' };
 
   try {
     const { provider, connection_id, refresh_token } = await req.json();
@@ -39,7 +37,7 @@ serve(async (req) => {
     if (!config) {
       return new Response(
         JSON.stringify({ error: `Unknown provider: ${provider}` }),
-        { status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } }
+        { status: 400, headers }
       );
     }
 
@@ -58,7 +56,7 @@ serve(async (req) => {
       const err = await tokenRes.text();
       return new Response(
         JSON.stringify({ error: 'Token refresh failed', details: err }),
-        { status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } }
+        { status: 400, headers }
       );
     }
 
@@ -80,12 +78,12 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ access_token: accessToken, expires_at: expiresAt }),
-      { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } }
+      { headers }
     );
   } catch (err) {
     return new Response(
       JSON.stringify({ error: (err as Error).message }),
-      { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } }
+      { status: 500, headers }
     );
   }
 });

@@ -18,65 +18,34 @@ export async function loadConnections(userId: string): Promise<CalendarConnectio
   return (data || []) as CalendarConnection[];
 }
 
-/** Exchange OAuth code for tokens.
- *  Uses direct token exchange for dev; in production, use the edge function instead
- *  to keep client_secret off the client.
+/** Exchange OAuth code for tokens via edge function.
+ *  Client secret stays server-side — never bundled into the client.
  */
 async function exchangeCodeForTokens(
   provider: string,
   code: string
 ): Promise<{ access_token: string; refresh_token: string | null; expires_at: string | null } | null> {
-  if (provider === 'google') {
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
-    const clientSecret = import.meta.env.VITE_GOOGLE_CLIENT_SECRET || '';
-    const redirectUri = `${window.location.origin}/auth/google/callback`;
+  const redirectUri = `${window.location.origin}/auth/${provider}/callback`;
 
-    // Try edge function first, fall back to direct exchange
-    const edgeFn = await supabase.functions.invoke('calendar-oauth-exchange', {
+  try {
+    const { data, error } = await supabase.functions.invoke('calendar-oauth-exchange', {
       body: { provider, code, redirect_uri: redirectUri },
-    }).catch(() => null);
+    });
 
-    if (edgeFn?.data?.access_token) {
+    if (!error && data?.access_token) {
       return {
-        access_token: edgeFn.data.access_token,
-        refresh_token: edgeFn.data.refresh_token || null,
-        expires_at: edgeFn.data.expires_at || null,
+        access_token: data.access_token,
+        refresh_token: data.refresh_token || null,
+        expires_at: data.expires_at || null,
       };
     }
 
-    // Direct exchange (dev fallback — requires VITE_GOOGLE_CLIENT_SECRET)
-    if (!clientSecret) {
-      console.error('Calendar: No VITE_GOOGLE_CLIENT_SECRET set and edge function unavailable');
-      return null;
-    }
-
-    const res = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        code,
-        client_id: clientId,
-        client_secret: clientSecret,
-        redirect_uri: redirectUri,
-        grant_type: 'authorization_code',
-      }),
-    });
-
-    if (!res.ok) {
-      console.error('Calendar: Token exchange failed', await res.text());
-      return null;
-    }
-
-    const data = await res.json();
-    const expiresIn = (data.expires_in as number) || 3600;
-    return {
-      access_token: data.access_token,
-      refresh_token: data.refresh_token || null,
-      expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
-    };
+    console.error('Calendar: Token exchange failed', error);
+    return null;
+  } catch (err) {
+    console.error('Calendar: Token exchange unavailable', err);
+    return null;
   }
-
-  return null;
 }
 
 /** Fetch the Google account email for the given access token. */
@@ -183,8 +152,36 @@ export async function fetchAllEvents(
   return results.sort((a, b) => a.start.localeCompare(b.start));
 }
 
-/** Disconnect a calendar connection. */
+/** Revoke an OAuth token so it can no longer be used. Best-effort — don't block on failure. */
+async function revokeToken(connection: CalendarConnection): Promise<void> {
+  if (connection.provider !== 'google') return;
+
+  const token = connection.access_token || connection.refresh_token;
+  if (!token) return;
+
+  try {
+    await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(token)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    });
+  } catch {
+    // Best-effort — token may already be expired/revoked
+  }
+}
+
+/** Disconnect a calendar connection — revokes the token then deletes the record. */
 export async function disconnectCalendar(connectionId: string): Promise<void> {
+  // Fetch the connection first so we can revoke the token
+  const { data } = await supabase
+    .from('calendar_connections')
+    .select('*')
+    .eq('id', connectionId)
+    .single();
+
+  if (data) {
+    await revokeToken(data as CalendarConnection);
+  }
+
   await supabase.from('calendar_connections').delete().eq('id', connectionId);
 }
 

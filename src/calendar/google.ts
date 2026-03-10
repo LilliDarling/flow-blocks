@@ -89,7 +89,7 @@ export const googleProvider: CalendarProvider = {
   async refreshToken(connection: CalendarConnection): Promise<{ access_token: string; expires_at: string } | null> {
     if (!connection.refresh_token) return null;
 
-    // Try edge function first, fall back to direct refresh
+    // Token refresh goes through edge function only — client secret stays server-side
     try {
       const { data, error } = await supabase.functions.invoke('calendar-token-refresh', {
         body: {
@@ -102,50 +102,11 @@ export const googleProvider: CalendarProvider = {
       if (!error && data?.access_token) {
         return { access_token: data.access_token, expires_at: data.expires_at };
       }
-    } catch {
-      // Edge function unavailable, try direct refresh
-    }
 
-    // Direct refresh fallback (requires VITE_GOOGLE_CLIENT_SECRET)
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
-    const clientSecret = import.meta.env.VITE_GOOGLE_CLIENT_SECRET || '';
-    if (!clientSecret) {
-      console.error('Calendar: No VITE_GOOGLE_CLIENT_SECRET set and edge function unavailable');
+      console.error('Calendar: Token refresh failed', error);
       return null;
-    }
-
-    try {
-      const res = await fetch('https://oauth2.googleapis.com/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          client_id: clientId,
-          client_secret: clientSecret,
-          refresh_token: connection.refresh_token,
-          grant_type: 'refresh_token',
-        }),
-      });
-
-      if (!res.ok) {
-        console.error('Calendar: Token refresh failed', await res.text());
-        return null;
-      }
-
-      const data = await res.json();
-      const expiresIn = (data.expires_in as number) || 3600;
-      const expires_at = new Date(Date.now() + expiresIn * 1000).toISOString();
-
-      // Update the connection in the DB with new tokens
-      await supabase
-        .from('calendar_connections')
-        .update({
-          access_token: data.access_token,
-          token_expires_at: expires_at,
-        })
-        .eq('id', connection.id);
-
-      return { access_token: data.access_token, expires_at };
-    } catch {
+    } catch (err) {
+      console.error('Calendar: Token refresh unavailable', err);
       return null;
     }
   },

@@ -24,6 +24,16 @@ function showError(msg: string): void {
   const el = $id('authError');
   el.textContent = msg;
   el.style.display = 'block';
+  el.style.color = 'var(--danger)';
+  (el as HTMLElement).style.background = 'rgba(239, 68, 68, 0.08)';
+}
+
+function showSuccess(msg: string): void {
+  const el = $id('authError');
+  el.textContent = msg;
+  el.style.display = 'block';
+  el.style.color = 'var(--recharge)';
+  (el as HTMLElement).style.background = 'rgba(52, 211, 153, 0.08)';
 }
 
 function clearError(): void {
@@ -31,6 +41,24 @@ function clearError(): void {
   el.textContent = '';
   el.style.display = 'none';
 }
+
+// --- Password toggle ---
+
+function initPasswordToggle(): void {
+  const toggle = $id('authPasswordToggle');
+  const input = $id('authPassword') as HTMLInputElement;
+  const eyeIcon = toggle.querySelector('.eye-icon') as SVGElement;
+  const eyeOffIcon = toggle.querySelector('.eye-off-icon') as SVGElement;
+
+  toggle.addEventListener('click', () => {
+    const isPassword = input.type === 'password';
+    input.type = isPassword ? 'text' : 'password';
+    eyeIcon.style.display = isPassword ? 'none' : '';
+    eyeOffIcon.style.display = isPassword ? '' : 'none';
+  });
+}
+
+// --- Auth actions ---
 
 async function handleSignUp(): Promise<void> {
   clearError();
@@ -50,10 +78,7 @@ async function handleSignUp(): Promise<void> {
   if (error) {
     showError(error.message);
   } else {
-    showError(''); // clear
-    $id('authError').style.display = 'block';
-    $id('authError').textContent = 'Check your email for a confirmation link!';
-    $id('authError').style.color = 'var(--recharge)';
+    showSuccess('Check your email for a confirmation link!');
   }
 }
 
@@ -73,15 +98,41 @@ async function handleSignIn(): Promise<void> {
   }
 }
 
+async function handleForgotPassword(): Promise<void> {
+  clearError();
+  const email = ($id('authEmail') as HTMLInputElement).value.trim();
+
+  if (!email) {
+    showError('Enter your email address first, then click "Forgot password?"');
+    return;
+  }
+
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/`,
+  });
+
+  if (error) {
+    showError(error.message);
+  } else {
+    showSuccess('Password reset link sent — check your email.');
+  }
+}
+
 async function handleSignOut(): Promise<void> {
   await supabase.auth.signOut();
 }
+
+// --- Init ---
 
 export function initAuth(): void {
   // Wire up auth form buttons
   $id('authSignIn').addEventListener('click', handleSignIn);
   $id('authSignUp').addEventListener('click', handleSignUp);
+  $id('authForgot').addEventListener('click', handleForgotPassword);
   $id('signOutBtn').addEventListener('click', handleSignOut);
+
+  // Password visibility toggle
+  initPasswordToggle();
 
   // Allow Enter key to submit
   $id('authPassword').addEventListener('keydown', (e) => {

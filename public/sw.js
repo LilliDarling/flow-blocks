@@ -1,4 +1,4 @@
-const CACHE_NAME = 'flowblocks-v2';
+const CACHE_NAME = 'flowblocks-v3';
 const PRECACHE = [
   '/',
   '/css/base.css',
@@ -15,7 +15,8 @@ self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE))
   );
-  self.skipWaiting();
+  // Don't skipWaiting automatically — let the app control when to activate
+  // so the user sees the "Update available" toast first
 });
 
 self.addEventListener('activate', (e) => {
@@ -27,18 +28,22 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
+// Listen for skip-waiting message from the app's update toast
+self.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
 
-  // Always go to network for Supabase API calls
+  // Always go to network for API calls and OAuth
   if (url.hostname.includes('supabase')) return;
-
-  // Let OAuth callback navigations pass through to the server
   if (url.pathname.startsWith('/auth/')) return;
-
-  // Let Google API calls pass through
   if (url.hostname.includes('googleapis.com')) return;
 
+  // Network-first for everything — fall back to cache when offline
   e.respondWith(
     fetch(e.request)
       .then((res) => {

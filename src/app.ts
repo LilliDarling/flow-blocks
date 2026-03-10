@@ -9,6 +9,7 @@ import { initAuth, onAuth } from './auth.js';
 import { initCalendarUI } from './calendar/ui.js';
 import { showCalendarSyncDialog } from './calendar/sync.js';
 import { initDragAndDrop } from './drag.js';
+import { initPWA } from './pwa.js';
 
 type TabName = 'day' | 'week' | 'pomo' | 'energy' | 'tips';
 const TAB_ORDER: TabName[] = ['day', 'week', 'pomo', 'energy', 'tips'];
@@ -109,12 +110,8 @@ async function onUserSignedIn(userId: string): Promise<void> {
   }
 }
 
-// Register service worker for PWA
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js');
-}
-
 document.addEventListener('DOMContentLoaded', () => {
+  initPWA();
   initAuth();
 
   onAuth((userId) => {
