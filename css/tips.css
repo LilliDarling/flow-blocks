@@ -29,3 +29,59 @@
 .tip-icon {
   font-size: 1.1rem;
 }
+
+/* Data & Privacy notice */
+.data-notice {
+  margin-top: 24px;
+  padding: 20px 22px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.data-notice h3 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.data-notice p {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  line-height: 1.6;
+  margin-bottom: 10px;
+}
+
+.data-notice p:last-child {
+  margin-bottom: 0;
+}
+
+.data-notice ul {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px;
+}
+
+.data-notice li {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  line-height: 1.6;
+  padding: 4px 0 4px 16px;
+  position: relative;
+}
+
+.data-notice li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 11px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.6;
+}
+
+.data-notice li strong {
+  color: var(--text);
+}

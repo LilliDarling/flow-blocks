@@ -63,11 +63,16 @@ class AppState {
   async load(userId: string): Promise<void> {
     this.userId = userId;
 
-    // Fetch blocks
+    // Fetch blocks: all recurring + one-off blocks from last 7 days
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 7);
+    const cutoffDate = cutoff.toISOString().slice(0, 10);
+
     const { data: blockRows } = await supabase
       .from('blocks')
       .select('*')
       .eq('user_id', userId)
+      .or(`block_date.is.null,block_date.gte.${cutoffDate}`)
       .order('start_time');
     this.blocks = (blockRows || []).map(blockFromRow);
 
