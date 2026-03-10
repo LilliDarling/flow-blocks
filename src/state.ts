@@ -1,6 +1,6 @@
 import { supabase } from './supabase.js';
 import {
-  FlowBlock, DoneItem, PomoMode, PomoSettings,
+  FlowBlock, DoneItem, PomoMode, PomoSettings, PomoSession, PomoSessionRow,
   BlockStatus, CompletionRow, EnergyLogRow,
   blockFromRow, doneItemFromRow, getTodayDate,
 } from './utils.js';
@@ -41,6 +41,7 @@ class AppState {
   energyLogs: EnergyLogRow[] = [];
   calendarConnections: CalendarConnection[] = [];
   calendarEvents: CalendarEvent[] = [];
+  pomoSessions: PomoSession[] = [];
   editingIndex = -1;
   selectedType = '';
   selectedDays: number[] = [];
@@ -124,6 +125,9 @@ class AppState {
         longAfter: pomoRow.long_after,
       };
     }
+
+    // Fetch today's pomo sessions (from all devices)
+    await this.loadPomoSessions();
   }
 
   // --- Block CRUD ---
@@ -342,6 +346,51 @@ class AppState {
         long_after: settings.longAfter,
         sound_on: soundOn,
       });
+  }
+
+  async loadPomoSessions(): Promise<void> {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const { data } = await supabase
+      .from('pomo_sessions')
+      .select('*')
+      .eq('user_id', this.userId)
+      .gte('completed_at', todayStart.toISOString())
+      .order('completed_at');
+    this.pomoSessions = (data || []).map((row: PomoSessionRow) => ({
+      id: row.id,
+      task: row.task,
+      duration: row.duration,
+      distractions: row.distractions,
+      completed_at: row.completed_at,
+    }));
+  }
+
+  async addPomoSession(session: { task: string; duration: number; distractions: number }): Promise<PomoSession | null> {
+    const { data } = await supabase
+      .from('pomo_sessions')
+      .insert({
+        user_id: this.userId,
+        task: session.task,
+        duration: session.duration,
+        distractions: session.distractions,
+      })
+      .select()
+      .single();
+
+    if (data) {
+      const row = data as PomoSessionRow;
+      const entry: PomoSession = {
+        id: row.id,
+        task: row.task,
+        duration: row.duration,
+        distractions: row.distractions,
+        completed_at: row.completed_at,
+      };
+      this.pomoSessions.push(entry);
+      return entry;
+    }
+    return null;
   }
 
   // --- UI ---

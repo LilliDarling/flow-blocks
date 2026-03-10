@@ -19,11 +19,54 @@
   <link rel="stylesheet" href="css/tips.css">
   <link rel="stylesheet" href="css/auth.css">
   <link rel="stylesheet" href="css/pwa.css">
+  <style>
+    /* Inline critical splash styles — renders before CSS files load */
+    .splash-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 999;
+      background: #0f0f13;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.3s;
+    }
+    .splash-screen.splash-fade { opacity: 0; pointer-events: none; }
+    .splash-content { text-align: center; }
+    .splash-title {
+      font-size: 1.6rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #7c6ff7, #38bdf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 20px;
+    }
+    .splash-spinner {
+      width: 28px;
+      height: 28px;
+      margin: 0 auto;
+      border: 3px solid rgba(124, 111, 247, 0.2);
+      border-top-color: #7c6ff7;
+      border-radius: 50%;
+      animation: splash-spin 0.7s linear infinite;
+    }
+    @keyframes splash-spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
 </head>
 <body>
 
+<!-- SPLASH SCREEN — visible until auth state is determined -->
+<div class="splash-screen" id="splashScreen">
+  <div class="splash-content">
+    <h1 class="splash-title">Flow Blocks</h1>
+    <div class="splash-spinner"></div>
+  </div>
+</div>
+
 <!-- AUTH SCREEN -->
-<div class="auth-screen" id="authScreen">
+<div class="auth-screen" id="authScreen" style="display:none">
   <div class="auth-card">
     <h2>Flow Blocks</h2>
     <p class="auth-subtitle">Sign in to sync your blocks across devices</p>

@@ -5,13 +5,6 @@ const RING_CIRCUMFERENCE = 2 * Math.PI * 124;
 const POMO_MODES: PomoMode[] = ['focus', 'short', 'long'];
 const STORAGE_KEY = 'pomo_timer';
 
-interface SessionEntry {
-  task: string;
-  duration: number;
-  distractions: number;
-  time: string;
-}
-
 /** Persisted timer state for surviving refresh / background */
 interface TimerSnapshot {
   mode: PomoMode;
@@ -25,7 +18,6 @@ interface TimerSnapshot {
 let currentTask = '';
 let distractionCount = 0;
 let autoStartBreaks = false;
-const sessionLog: SessionEntry[] = [];
 let tickInterval: ReturnType<typeof setInterval> | null = null;
 
 // --- Persistence ---
@@ -135,8 +127,19 @@ function getLabel(): string {
   return 'Long break';
 }
 
+function syncSettingsFromInputs(): void {
+  const { settings } = state.pomo;
+  settings.focus = parseInt(($id('pomoFocusDur') as HTMLInputElement).value) || settings.focus;
+  settings.short = parseInt(($id('pomoShortDur') as HTMLInputElement).value) || settings.short;
+  settings.long = parseInt(($id('pomoLongDur') as HTMLInputElement).value) || settings.long;
+  settings.longAfter = parseInt(($id('pomoLongAfter') as HTMLInputElement).value) || settings.longAfter;
+}
+
 function getDuration(mode: PomoMode): number {
-  return state.pomo.settings[mode === 'long' ? 'long' : mode === 'short' ? 'short' : 'focus'];
+  // Always read from HTML inputs to stay in sync with what the user sees
+  if (mode === 'focus') return parseInt(($id('pomoFocusDur') as HTMLInputElement).value) || state.pomo.settings.focus;
+  if (mode === 'short') return parseInt(($id('pomoShortDur') as HTMLInputElement).value) || state.pomo.settings.short;
+  return parseInt(($id('pomoLongDur') as HTMLInputElement).value) || state.pomo.settings.long;
 }
 
 function render(): void {
@@ -229,12 +232,10 @@ function celebrate(): void {
 
 function logSession(): void {
   if (!currentTask && distractionCount === 0) return;
-  const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  sessionLog.push({
+  state.addPomoSession({
     task: currentTask || 'Untitled focus',
     duration: state.pomo.settings.focus,
     distractions: distractionCount,
-    time,
   });
   renderSessionLog();
 }
@@ -242,17 +243,20 @@ function logSession(): void {
 function renderSessionLog(): void {
   const section = $id('pomoSessionLog');
   const list = $id('pomoSessionList');
-  if (sessionLog.length === 0) {
+  const sessions = state.pomoSessions;
+  if (sessions.length === 0) {
     section.style.display = 'none';
     return;
   }
   section.style.display = '';
-  list.innerHTML = sessionLog.map(s =>
-    `<div class="pomo-session-entry">
-      <span class="pomo-session-task">${s.task}</span>
-      <span class="pomo-session-meta">${s.duration}m${s.distractions > 0 ? ` · ${s.distractions} distraction${s.distractions !== 1 ? 's' : ''}` : ''} · ${s.time}</span>
-    </div>`
-  ).join('');
+  list.innerHTML = sessions.map(s => {
+    const time = new Date(s.completed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const escaped = s.task.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return `<div class="pomo-session-entry">
+      <span class="pomo-session-task">${escaped}</span>
+      <span class="pomo-session-meta">${s.duration}m${s.distractions > 0 ? ` · ${s.distractions} distraction${s.distractions !== 1 ? 's' : ''}` : ''} · ${time}</span>
+    </div>`;
+  }).join('');
 }
 
 // --- Timer logic ---
@@ -330,6 +334,7 @@ function setMode(mode: PomoMode): void {
   stopTicking();
   pomo.running = false;
   pomo.mode = mode;
+  syncSettingsFromInputs();
   pomo.totalSeconds = getDuration(mode) * 60;
   pomo.secondsLeft = pomo.totalSeconds;
   clearTimerStorage();
@@ -479,6 +484,9 @@ export function initPomodoro(): void {
 
   // Recalculate timer when app returns from background
   document.addEventListener('visibilitychange', onVisibilityChange);
+
+  // Render sessions loaded from DB (all devices)
+  renderSessionLog();
 
   render();
 }

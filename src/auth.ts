@@ -5,17 +5,28 @@ import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 type AuthCallback = (userId: string | null) => void;
 
 let onAuthChange: AuthCallback = () => {};
+let initialResolved = false;
 
 export function onAuth(callback: AuthCallback): void {
   onAuthChange = callback;
 }
 
-function showAuth(): void {
+function hideSplash(): void {
+  const splash = document.getElementById('splashScreen');
+  if (!splash) return;
+  splash.classList.add('splash-fade');
+  setTimeout(() => { splash.style.display = 'none'; }, 300);
+}
+
+export function showAuth(): void {
+  hideSplash();
   $id('authScreen').style.display = 'flex';
   $id('appScreen').style.display = 'none';
 }
 
-function showApp(): void {
+/** Call this after data is loaded to reveal the app screen. */
+export function showApp(): void {
+  hideSplash();
   $id('authScreen').style.display = 'none';
   $id('appScreen').style.display = 'block';
 }
@@ -96,6 +107,7 @@ async function handleSignIn(): Promise<void> {
   if (error) {
     showError(error.message);
   }
+  // On success, onAuthStateChange will fire and the callback handles the rest
 }
 
 async function handleForgotPassword(): Promise<void> {
@@ -139,10 +151,12 @@ export function initAuth(): void {
     if ((e as KeyboardEvent).key === 'Enter') handleSignIn();
   });
 
-  // Listen for auth state changes
+  // Listen for auth state changes (fires after initial check too)
   supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
     if (session?.user) {
-      showApp();
+      // Don't call showApp() here — let onUserSignedIn do it after data loads.
+      // But if auth changes AFTER initial load (e.g. sign-in from auth screen),
+      // we still need to notify the callback.
       onAuthChange(session.user.id);
     } else {
       showAuth();
@@ -150,10 +164,11 @@ export function initAuth(): void {
     }
   });
 
-  // Check initial session
+  // Check initial session — the splash screen stays visible until this resolves
   supabase.auth.getSession().then(({ data: { session } }) => {
+    initialResolved = true;
     if (session?.user) {
-      showApp();
+      // Don't showApp yet — onUserSignedIn will call showApp after data loads
       onAuthChange(session.user.id);
     } else {
       showAuth();

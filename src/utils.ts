@@ -108,6 +108,24 @@ export interface PomoSettingsRow {
   sound_on: boolean;
 }
 
+export interface PomoSession {
+  id?: string;
+  task: string;
+  duration: number;
+  distractions: number;
+  completed_at: string;
+}
+
+export interface PomoSessionRow {
+  id: string;
+  user_id: string;
+  task: string;
+  duration: number;
+  distractions: number;
+  completed_at: string;
+  created_at: string;
+}
+
 export function blockFromRow(row: BlockRow): FlowBlock {
   return {
     id: row.id,

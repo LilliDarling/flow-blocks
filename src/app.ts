@@ -5,7 +5,7 @@ import { renderWeek, initWeekEvents } from './week.js';
 import { renderEnergyAnalytics } from './energy.js';
 import { openModal, initModalEvents } from './modal.js';
 import { initPomodoro } from './pomodoro.js';
-import { initAuth, onAuth } from './auth.js';
+import { initAuth, onAuth, showApp } from './auth.js';
 import { initCalendarUI } from './calendar/ui.js';
 import { showCalendarSyncDialog } from './calendar/sync.js';
 import { initDragAndDrop } from './drag.js';
@@ -85,6 +85,7 @@ function initUI(): void {
 let uiInitialized = false;
 
 async function onUserSignedIn(userId: string): Promise<void> {
+  // Load all data while splash screen is still visible
   await state.load(userId);
 
   // Restore energy slider to last logged value before initUI reads it
@@ -100,9 +101,12 @@ async function onUserSignedIn(userId: string): Promise<void> {
   }
 
   // Check if we're returning from a calendar OAuth redirect
-  const wasRedirect = await state.checkCalendarRedirect();
+  await state.checkCalendarRedirect();
 
   renderTimeline();
+
+  // Data is loaded — now reveal the app (hides splash)
+  showApp();
 
   // Show sync dialog if there are calendar events to review
   if (state.calendarEvents.length > 0) {
