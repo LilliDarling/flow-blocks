@@ -25,14 +25,15 @@ async function handleInstallClick(): Promise<void> {
   }
 }
 
-// --- Update toast ---
+// --- Update handling ---
+
+let updateReady = false;
 
 function showUpdateToast(): void {
   $id('updateToast').style.display = 'flex';
 }
 
-function handleUpdateClick(): void {
-  // Tell the waiting service worker to activate, then reload
+function applyUpdate(): void {
   navigator.serviceWorker.getRegistration().then((reg) => {
     if (reg?.waiting) {
       reg.waiting.postMessage({ type: 'SKIP_WAITING' });
@@ -42,6 +43,10 @@ function handleUpdateClick(): void {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     window.location.reload();
   });
+}
+
+function handleUpdateClick(): void {
+  applyUpdate();
 }
 
 // --- Service worker registration with update detection ---
@@ -55,7 +60,7 @@ function registerServiceWorker(): void {
 
     // If there's already a waiting worker (e.g. update happened while tab was open)
     if (reg.waiting) {
-      showUpdateToast();
+      markUpdateReady();
       return;
     }
 
@@ -65,13 +70,23 @@ function registerServiceWorker(): void {
       if (!newWorker) return;
 
       newWorker.addEventListener('statechange', () => {
-        // New SW installed and waiting — show update prompt
+        // New SW installed and waiting
         if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-          showUpdateToast();
+          markUpdateReady();
         }
       });
     });
   });
+}
+
+/** Flag an update as ready — auto-applies on next focus, or immediately if already focused. */
+function markUpdateReady(): void {
+  updateReady = true;
+  if (document.visibilityState === 'visible') {
+    applyUpdate();
+  }
+  // Fallback: show toast in case auto-reload takes a moment
+  showUpdateToast();
 }
 
 // --- Init ---
@@ -108,6 +123,22 @@ export function initPWA(): void {
   if (sessionStorage.getItem('pwa_install_dismissed')) {
     hideInstallBanner();
   }
+
+  // Auto-apply pending updates when tab regains focus
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+
+    // If an update is already waiting, apply it now
+    if (updateReady) {
+      applyUpdate();
+      return;
+    }
+
+    // Otherwise, check for new updates on each focus
+    navigator.serviceWorker.getRegistration().then((reg) => {
+      if (reg) reg.update();
+    });
+  });
 
   // Register SW with update detection
   registerServiceWorker();
