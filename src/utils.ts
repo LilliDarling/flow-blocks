@@ -27,7 +27,7 @@ export function energySuggestion(energy: number): string {
 }
 
 export type BlockType = 'deep' | 'light' | 'admin' | 'recharge' | 'flex' | 'buffer';
-export type BlockStatus = 'pending' | 'done' | 'skipped';
+export type BlockStatus = 'pending' | 'done' | 'skipped' | 'dismissed';
 
 export interface FlowBlock {
   id?: string;
@@ -106,6 +106,43 @@ export interface PomoSettingsRow {
   long_duration: number;
   long_after: number;
   sound_on: boolean;
+}
+
+export interface Reminder {
+  id?: string;
+  name: string;
+  time: string;        // "HH:MM" — when the reminder should fire
+  days: number[];      // [0=Mon...6=Sun] for recurring days
+  icon: string;        // emoji icon for quick visual identification
+  created_at?: string;
+}
+
+export interface ReminderRow {
+  id: string;
+  user_id: string;
+  name: string;
+  reminder_time: string;
+  days: number[];
+  icon: string;
+  created_at: string;
+}
+
+export interface ReminderCompletionRow {
+  id: string;
+  reminder_id: string;
+  completion_date: string;
+  completed_at: string;
+}
+
+export function reminderFromRow(row: ReminderRow): Reminder {
+  return {
+    id: row.id,
+    name: row.name,
+    time: row.reminder_time.slice(0, 5),
+    days: row.days || [],
+    icon: row.icon || '',
+    created_at: row.created_at,
+  };
 }
 
 export interface PomoSession {

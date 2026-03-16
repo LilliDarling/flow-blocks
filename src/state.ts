@@ -2,6 +2,7 @@ import { supabase } from './supabase.js';
 import {
   FlowBlock, DoneItem, PomoMode, PomoSettings, PomoSession, PomoSessionRow,
   BlockStatus, CompletionRow, EnergyLogRow,
+  Reminder, ReminderRow, ReminderCompletionRow, reminderFromRow,
   blockFromRow, doneItemFromRow, getTodayDate,
 } from './utils.js';
 import {
@@ -42,6 +43,9 @@ class AppState {
   calendarConnections: CalendarConnection[] = [];
   calendarEvents: CalendarEvent[] = [];
   pomoSessions: PomoSession[] = [];
+  reminders: Reminder[] = [];
+  reminderCompletions: Set<string> = new Set(); // reminder IDs completed today
+  reminderDismissals: Set<string> = new Set(); // reminder IDs dismissed for today (in-memory only)
   editingIndex = -1;
   selectedType = '';
   selectedDays: number[] = [];
@@ -133,6 +137,9 @@ class AppState {
 
     // Fetch today's pomo sessions (from all devices)
     await this.loadPomoSessions();
+
+    // Fetch reminders + today's completions
+    await this.loadReminders();
   }
 
   // --- Block CRUD ---
@@ -396,6 +403,107 @@ class AppState {
       return entry;
     }
     return null;
+  }
+
+  // --- Reminders ---
+
+  async loadReminders(): Promise<void> {
+    const { data: reminderRows } = await supabase
+      .from('reminders')
+      .select('*')
+      .eq('user_id', this.userId)
+      .order('reminder_time');
+    this.reminders = (reminderRows || []).map((r: ReminderRow) => reminderFromRow(r));
+
+    // Load today's completions
+    const today = getTodayDate();
+    const reminderIds = this.reminders.filter(r => r.id).map(r => r.id!);
+    this.reminderCompletions.clear();
+    if (reminderIds.length > 0) {
+      const { data: compRows } = await supabase
+        .from('reminder_completions')
+        .select('*')
+        .in('reminder_id', reminderIds)
+        .eq('completion_date', today);
+      for (const row of (compRows || []) as ReminderCompletionRow[]) {
+        this.reminderCompletions.add(row.reminder_id);
+      }
+    }
+  }
+
+  async addReminder(reminder: Reminder): Promise<void> {
+    const { data, error } = await supabase
+      .from('reminders')
+      .insert({
+        user_id: this.userId,
+        name: reminder.name,
+        reminder_time: reminder.time,
+        days: reminder.days,
+        icon: reminder.icon,
+      })
+      .select()
+      .single();
+
+    if (!error && data) {
+      this.reminders.push(reminderFromRow(data));
+    }
+    this.showSaveBanner();
+  }
+
+  async updateReminder(index: number, reminder: Reminder): Promise<void> {
+    const existing = this.reminders[index];
+    if (!existing?.id) return;
+
+    const { data, error } = await supabase
+      .from('reminders')
+      .update({
+        name: reminder.name,
+        reminder_time: reminder.time,
+        days: reminder.days,
+        icon: reminder.icon,
+      })
+      .eq('id', existing.id)
+      .select()
+      .single();
+
+    if (!error && data) {
+      this.reminders[index] = reminderFromRow(data);
+    }
+    this.showSaveBanner();
+  }
+
+  async deleteReminder(index: number): Promise<void> {
+    const existing = this.reminders[index];
+    if (!existing?.id) return;
+
+    await supabase.from('reminders').delete().eq('id', existing.id);
+    this.reminders.splice(index, 1);
+    this.showSaveBanner();
+  }
+
+  isReminderCompletedToday(reminder: Reminder): boolean {
+    return reminder.id ? this.reminderCompletions.has(reminder.id) : false;
+  }
+
+  async toggleReminderCompletion(reminder: Reminder): Promise<void> {
+    if (!reminder.id) return;
+    const today = getTodayDate();
+
+    if (this.reminderCompletions.has(reminder.id)) {
+      // Uncomplete
+      await supabase
+        .from('reminder_completions')
+        .delete()
+        .eq('reminder_id', reminder.id)
+        .eq('completion_date', today);
+      this.reminderCompletions.delete(reminder.id);
+    } else {
+      // Complete
+      await supabase
+        .from('reminder_completions')
+        .insert({ reminder_id: reminder.id, completion_date: today });
+      this.reminderCompletions.add(reminder.id);
+    }
   }
 
   // --- UI ---

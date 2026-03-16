@@ -1,7 +1,8 @@
 import { state } from './state.js';
-import { DAYS, BlockType, FlowBlock, fmtTime, addMinutes, $id, getTodayIndex, getTodayDate, getDateForDayIndex } from './utils.js';
+import { DAYS, BlockType, FlowBlock, fmtTime, addMinutes, $id, getTodayIndex, getTodayDate, getDateForDayIndex, TYPE_LABELS } from './utils.js';
 import { renderTimeline } from './timeline.js';
 import { renderWeek } from './week.js';
+import { confirmDelete } from './confirm-delete.js';
 
 let scheduleMode: 'today' | 'recurring' = 'today';
 
@@ -224,12 +225,26 @@ async function saveBlock(): Promise<void> {
 }
 
 async function deleteBlock(): Promise<void> {
-  if (state.editingIndex >= 0) {
+  if (state.editingIndex < 0) return;
+
+  const block = state.blocks[state.editingIndex];
+  if (!block) return;
+
+  const isRecurring = !block.date;
+  const name = block.title || TYPE_LABELS[block.type] + ' block';
+  const choice = await confirmDelete(name, isRecurring);
+
+  if (!choice) return; // cancelled
+
+  if (choice === 'this') {
+    await state.updateBlockStatus(state.editingIndex, 'dismissed');
+  } else {
     await state.deleteBlock(state.editingIndex);
-    closeModal();
-    renderTimeline();
-    renderWeek();
   }
+
+  closeModal();
+  renderTimeline();
+  renderWeek();
 }
 
 export function initModalEvents(): void {

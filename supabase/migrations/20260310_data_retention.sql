@@ -5,13 +5,15 @@
 
 -- Cleanup function that removes stale data beyond retention windows.
 -- Call with:  SELECT cleanup_stale_data();
+DROP FUNCTION IF EXISTS cleanup_stale_data();
 CREATE OR REPLACE FUNCTION cleanup_stale_data()
 RETURNS TABLE(
   deleted_completions bigint,
   deleted_done_items bigint,
   deleted_energy_logs bigint,
   deleted_pomo_sessions bigint,
-  deleted_oneoff_blocks bigint
+  deleted_oneoff_blocks bigint,
+  deleted_reminder_completions bigint
 ) LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
   v_completions bigint;
@@ -19,6 +21,7 @@ DECLARE
   v_energy_logs bigint;
   v_pomo_sessions bigint;
   v_oneoff_blocks bigint;
+  v_reminder_completions bigint;
 BEGIN
   -- 1. block_completions older than 7 days
   DELETE FROM block_completions
@@ -46,7 +49,12 @@ BEGIN
     AND block_date::date < (CURRENT_DATE - INTERVAL '7 days');
   GET DIAGNOSTICS v_oneoff_blocks = ROW_COUNT;
 
-  RETURN QUERY SELECT v_completions, v_done_items, v_energy_logs, v_pomo_sessions, v_oneoff_blocks;
+  -- 6. reminder_completions older than 30 days
+  DELETE FROM reminder_completions
+  WHERE completion_date < (CURRENT_DATE - INTERVAL '30 days');
+  GET DIAGNOSTICS v_reminder_completions = ROW_COUNT;
+
+  RETURN QUERY SELECT v_completions, v_done_items, v_energy_logs, v_pomo_sessions, v_oneoff_blocks, v_reminder_completions;
 END;
 $$;
 

@@ -18,6 +18,7 @@
   <link rel="stylesheet" href="css/calendar.css">
   <link rel="stylesheet" href="css/tips.css">
   <link rel="stylesheet" href="css/auth.css">
+  <link rel="stylesheet" href="css/routines.css">
   <link rel="stylesheet" href="css/pwa.css">
   <style>
     /* Inline critical splash styles — renders before CSS files load */
@@ -131,6 +132,7 @@
 <div class="tabs">
   <button class="tab-btn active">Today</button>
   <button class="tab-btn">Week</button>
+  <button class="tab-btn">Reminders</button>
   <button class="tab-btn">Pomodoro</button>
   <button class="tab-btn">Energy</button>
   <button class="tab-btn">Brain Tips</button>
@@ -160,6 +162,22 @@
 <!-- WEEK VIEW -->
 <div class="view" id="week-view">
   <div class="week-grid" id="weekGrid"></div>
+</div>
+
+<!-- REMINDERS VIEW -->
+<div class="view" id="routines-view">
+  <div class="reminders-section" id="remindersSection">
+    <div class="reminders-header">
+      <h3>Today's Reminders</h3>
+      <button class="add-reminder-btn" id="addReminderBtn">+ Add Reminder</button>
+    </div>
+    <div id="remindersList"></div>
+
+    <div class="reminders-all-header">
+      <h3>All Reminders</h3>
+    </div>
+    <div id="reminderManageList"></div>
+  </div>
 </div>
 
 <!-- POMODORO VIEW -->
@@ -314,6 +332,7 @@
         <li><strong>Done list items</strong> — kept for <strong>30 days</strong>.</li>
         <li><strong>Energy logs</strong> — kept for <strong>30 days</strong> (14 days are used for your analytics chart).</li>
         <li><strong>Pomodoro sessions</strong> — kept for <strong>30 days</strong>.</li>
+        <li><strong>Reminders</strong> — kept as long as your account exists. Daily completion history kept for <strong>30 days</strong>.</li>
       </ul>
       <p>Cleanup runs automatically each night. All data is protected by row-level security — only you can see your own data. We never share or sell your information.</p>
     </div>
@@ -395,6 +414,50 @@
     <div class="modal-buttons">
       <button class="btn btn-ghost" id="calSyncSkip">Skip all</button>
       <button class="btn btn-primary" id="calSyncApply">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- DELETE CONFIRMATION DIALOG -->
+<div class="modal-overlay" id="deleteConfirm">
+  <div class="modal delete-confirm-modal">
+    <h2 id="deleteConfirmTitle">Delete?</h2>
+    <p class="delete-confirm-desc" id="deleteConfirmDesc"></p>
+    <div class="delete-confirm-options">
+      <button class="btn delete-option-btn" id="deleteThisBtn">Just this one</button>
+      <button class="btn delete-option-btn" id="deleteFutureBtn">This &amp; future</button>
+      <button class="btn btn-danger delete-option-btn" id="deleteAllBtn">All occurrences</button>
+    </div>
+    <div class="modal-buttons">
+      <button class="btn btn-ghost" id="deleteCancelBtn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- REMINDER MODAL -->
+<div class="modal-overlay reminder-modal" id="reminderModal">
+  <div class="modal">
+    <h2 id="reminderModalTitle">Add Reminder</h2>
+    <div class="form-group">
+      <label>Icon (paste any emoji)</label>
+      <input type="text" class="reminder-icon-input" id="reminderIconInput" placeholder="e.g. 💊" maxlength="4">
+    </div>
+    <div class="form-group">
+      <label>What do you need to do?</label>
+      <input type="text" id="reminderName" placeholder="e.g. Take vitamin D">
+    </div>
+    <div class="form-group">
+      <label>Reminder time</label>
+      <input type="time" id="reminderTime" value="08:00">
+    </div>
+    <div class="form-group">
+      <label>Repeat on</label>
+      <div style="display:flex; gap:6px; flex-wrap:wrap" id="reminderDayPickers"></div>
+    </div>
+    <div class="modal-buttons">
+      <button class="btn btn-danger" id="reminderDeleteBtn" style="display:none;margin-right:auto">Delete</button>
+      <button class="btn btn-ghost" id="reminderCancelBtn">Cancel</button>
+      <button class="btn btn-primary" id="reminderSaveBtn">Save</button>
     </div>
   </div>
 </div>

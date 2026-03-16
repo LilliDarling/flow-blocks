@@ -86,6 +86,37 @@
   margin-top: 20px;
 }
 
+/* Delete confirmation dialog */
+.delete-confirm-modal {
+  max-width: 360px;
+  text-align: center;
+}
+
+.delete-confirm-desc {
+  font-size: 0.84rem;
+  color: var(--text-dim);
+  margin-bottom: 18px;
+  line-height: 1.5;
+}
+
+.delete-confirm-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.delete-option-btn {
+  width: 100%;
+  padding: 10px;
+  justify-content: center;
+  font-size: 0.85rem;
+}
+
+.delete-confirm-modal .modal-buttons {
+  justify-content: center;
+}
+
 @media (max-width: 768px) {
   .modal {
     padding: 20px 16px;

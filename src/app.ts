@@ -9,10 +9,12 @@ import { initAuth, onAuth, showApp } from './auth.js';
 import { initCalendarUI } from './calendar/ui.js';
 import { showCalendarSyncDialog } from './calendar/sync.js';
 import { initDragAndDrop } from './drag.js';
+import { renderReminders, initReminderEvents, scheduleReminders } from './routines.js';
+import { initDeleteConfirmEvents } from './confirm-delete.js';
 import { initPWA } from './pwa.js';
 
-type TabName = 'day' | 'week' | 'pomo' | 'energy' | 'tips';
-const TAB_ORDER: TabName[] = ['day', 'week', 'pomo', 'energy', 'tips'];
+type TabName = 'day' | 'week' | 'routines' | 'pomo' | 'energy' | 'tips';
+const TAB_ORDER: TabName[] = ['day', 'week', 'routines', 'pomo', 'energy', 'tips'];
 
 function switchTab(tab: TabName): void {
   document.querySelectorAll('.tab-btn').forEach((btn, i) => {
@@ -23,6 +25,7 @@ function switchTab(tab: TabName): void {
 
   if (tab === 'day') renderTimeline();
   if (tab === 'week') renderWeek();
+  if (tab === 'routines') renderReminders();
   if (tab === 'energy') renderEnergyAnalytics();
 }
 
@@ -79,6 +82,8 @@ function initUI(): void {
   initWeekEvents();
   initModalEvents();
   initPomodoro();
+  initReminderEvents();
+  initDeleteConfirmEvents();
   initCalendarUI();
 }
 
@@ -104,6 +109,8 @@ async function onUserSignedIn(userId: string): Promise<void> {
   await state.checkCalendarRedirect();
 
   renderTimeline();
+  renderReminders();
+  scheduleReminders();
 
   // Data is loaded — now reveal the app (hides splash)
   showApp();

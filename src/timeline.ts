@@ -1,6 +1,7 @@
 import { state } from './state.js';
 import { fmtTime, addMinutes, getTodayIndex, getTodayDate, TYPE_LABELS, BlockStatus, ENERGY_FIT, FlowBlock, $id } from './utils.js';
 import { openModal } from './modal.js';
+import { confirmDelete } from './confirm-delete.js';
 import type { CalendarEvent } from './calendar/types.js';
 
 /** A unified item for timeline rendering — either a flow block or a calendar event. */
@@ -13,12 +14,14 @@ export function renderTimeline(): void {
   const dayIndex = getTodayIndex();
   const today = getTodayDate();
 
-  // Gather flow blocks for today
+  // Gather flow blocks for today, excluding dismissed ones
   const dayBlocks: TimelineItem[] = state.blocks
     .filter(b => {
       if (b.date) return b.date === today;
       if (!b.days.includes(dayIndex)) return false;
       if (b.created_at && today < b.created_at.slice(0, 10)) return false;
+      // Hide blocks dismissed via "just this one" delete
+      if (state.getEffectiveStatus(b, today) === 'dismissed') return false;
       return true;
     })
     .map(b => ({ kind: 'block' as const, block: b, index: state.blocks.indexOf(b) }));
@@ -143,7 +146,22 @@ async function markSkip(idx: number): Promise<void> {
 }
 
 async function deleteFromTimeline(idx: number): Promise<void> {
-  await state.deleteBlock(idx);
+  const block = state.blocks[idx];
+  if (!block) return;
+
+  const isRecurring = !block.date;
+  const name = block.title || TYPE_LABELS[block.type] + ' block';
+  const choice = await confirmDelete(name, isRecurring);
+
+  if (!choice) return; // cancelled
+
+  if (choice === 'this') {
+    // Dismiss just today's occurrence (hides from view)
+    await state.updateBlockStatus(idx, 'dismissed');
+  } else {
+    // 'future' or 'all' — delete the block template
+    await state.deleteBlock(idx);
+  }
   renderTimeline();
 }
 
