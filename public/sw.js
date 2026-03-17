@@ -1,4 +1,4 @@
-const CACHE_NAME = 'flowblocks-v3';
+const CACHE_NAME = 'flowblocks-v4';
 const PRECACHE = [
   '/',
   '/css/base.css',
@@ -34,6 +34,46 @@ self.addEventListener('message', (e) => {
     self.skipWaiting();
   }
 });
+
+// --- Web Push ---
+
+self.addEventListener('push', (e) => {
+  if (!e.data) return;
+
+  e.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      // Skip if the app is focused — client-side notification handles it
+      const appIsFocused = windowClients.some((c) => c.visibilityState === 'visible');
+      if (appIsFocused) return;
+
+      const data = e.data.json();
+      return self.registration.showNotification(data.title || 'Flow Blocks', {
+        body: data.body || '',
+        icon: data.icon || '/icons/icon.svg',
+        tag: data.tag || 'reminder',
+        data: { url: data.url || '/' },
+      });
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = e.notification.data?.url || '/';
+
+  e.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      for (const client of windowClients) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      return clients.openWindow(url);
+    })
+  );
+});
+
+// --- Fetch ---
 
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);

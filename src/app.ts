@@ -12,6 +12,7 @@ import { initDragAndDrop } from './drag.js';
 import { renderReminders, initReminderEvents, scheduleReminders } from './routines.js';
 import { initDeleteConfirmEvents } from './confirm-delete.js';
 import { initPWA } from './pwa.js';
+import { subscribeToPush } from './push.js';
 
 type TabName = 'day' | 'week' | 'routines' | 'pomo' | 'energy' | 'tips';
 const TAB_ORDER: TabName[] = ['day', 'week', 'routines', 'pomo', 'energy', 'tips'];
@@ -114,6 +115,9 @@ async function onUserSignedIn(userId: string): Promise<void> {
 
   // Data is loaded — now reveal the app (hides splash)
   showApp();
+
+  // Register push subscription (fire-and-forget)
+  subscribeToPush(userId);
 
   // Show sync dialog if there are calendar events to review
   if (state.calendarEvents.length > 0) {

@@ -13,7 +13,8 @@ RETURNS TABLE(
   deleted_energy_logs bigint,
   deleted_pomo_sessions bigint,
   deleted_oneoff_blocks bigint,
-  deleted_reminder_completions bigint
+  deleted_reminder_completions bigint,
+  deleted_push_notification_log bigint
 ) LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
   v_completions bigint;
@@ -22,6 +23,7 @@ DECLARE
   v_pomo_sessions bigint;
   v_oneoff_blocks bigint;
   v_reminder_completions bigint;
+  v_push_notification_log bigint;
 BEGIN
   -- 1. block_completions older than 7 days
   DELETE FROM block_completions
@@ -54,7 +56,12 @@ BEGIN
   WHERE completion_date < (CURRENT_DATE - INTERVAL '30 days');
   GET DIAGNOSTICS v_reminder_completions = ROW_COUNT;
 
-  RETURN QUERY SELECT v_completions, v_done_items, v_energy_logs, v_pomo_sessions, v_oneoff_blocks, v_reminder_completions;
+  -- 7. push_notification_log older than 2 days
+  DELETE FROM push_notification_log
+  WHERE notification_date < (CURRENT_DATE - INTERVAL '2 days');
+  GET DIAGNOSTICS v_push_notification_log = ROW_COUNT;
+
+  RETURN QUERY SELECT v_completions, v_done_items, v_energy_logs, v_pomo_sessions, v_oneoff_blocks, v_reminder_completions, v_push_notification_log;
 END;
 $$;
 
