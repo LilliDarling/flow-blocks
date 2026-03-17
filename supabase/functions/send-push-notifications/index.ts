@@ -46,29 +46,28 @@ serve(async () => {
   let sent = 0;
 
   for (const sub of subs) {
-    // 3. Compute local time in the subscription's timezone
-    const localTime = now.toLocaleTimeString('en-GB', {
-      timeZone: sub.timezone || 'UTC',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    }); // "14:30"
+    const tz = sub.timezone || 'UTC';
 
-    const localDate = now.toLocaleDateString('en-CA', {
-      timeZone: sub.timezone || 'UTC',
-    }); // "2026-03-17"
+    // 3. Compute local time components in the subscription's timezone
+    const localDate = now.toLocaleDateString('en-CA', { timeZone: tz }); // "2026-03-17"
+    const localDow = localDayOfWeek(now, tz);
+    const nowMinutes = localMinutesSinceMidnight(now, tz);
 
-    const localDow = localDayOfWeek(now, sub.timezone || 'UTC');
-
-    // 4. Find reminders due for this user right now
+    // 4. Find reminders due for this user within the send window
     const userReminders = reminders.filter(
       (r: { user_id: string }) => r.user_id === sub.user_id,
     );
 
     for (const reminder of userReminders) {
-      const reminderHHMM = reminder.reminder_time.slice(0, 5);
-      if (reminderHHMM !== localTime) continue;
       if (!reminder.days.includes(localDow)) continue;
+
+      const [rh, rm] = reminder.reminder_time.slice(0, 5).split(':').map(Number);
+      const reminderMinutes = rh * 60 + rm;
+
+      // Send window: 5 minutes before the scheduled time through 5 minutes after
+      // (catches early send + missed cron runs)
+      const diff = reminderMinutes - nowMinutes;
+      if (diff < -5 || diff > 5) continue;
 
       // 5. Check if already completed today
       const { count } = await supabase
@@ -92,7 +91,7 @@ serve(async () => {
       // 7. Send push notification
       const payload = JSON.stringify({
         title: `${reminder.icon || '💊'} ${reminder.name}`,
-        body: `Gentle reminder — it's ${formatTime(reminderHHMM)}`,
+        body: `Gentle reminder — it's ${formatTime(reminder.reminder_time.slice(0, 5))}`,
         icon: '/icons/icon.svg',
         tag: `reminder-${reminder.id}`,
         url: '/',
@@ -121,6 +120,13 @@ serve(async () => {
     headers: { 'Content-Type': 'application/json' },
   });
 });
+
+/** Get minutes since midnight in the given timezone */
+function localMinutesSinceMidnight(date: Date, timezone: string): number {
+  const h = parseInt(date.toLocaleTimeString('en-GB', { timeZone: timezone, hour: '2-digit', hour12: false }));
+  const m = parseInt(date.toLocaleTimeString('en-GB', { timeZone: timezone, minute: '2-digit' }));
+  return h * 60 + m;
+}
 
 /** Convert local day-of-week to project convention: Mon=0 .. Sun=6 */
 function localDayOfWeek(date: Date, timezone: string): number {
