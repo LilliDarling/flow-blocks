@@ -45,7 +45,7 @@ class AppState {
   pomoSessions: PomoSession[] = [];
   reminders: Reminder[] = [];
   reminderCompletions: Set<string> = new Set(); // reminder IDs completed today
-  reminderDismissals: Set<string> = new Set(); // reminder IDs dismissed for today (in-memory only)
+  reminderSkips: Set<string> = new Set(); // reminder IDs skipped today (persisted)
   editingIndex = -1;
   selectedType = '';
   selectedDays: number[] = [];
@@ -415,10 +415,11 @@ class AppState {
       .order('reminder_time');
     this.reminders = (reminderRows || []).map((r: ReminderRow) => reminderFromRow(r));
 
-    // Load today's completions
+    // Load today's completions and skips
     const today = getTodayDate();
     const reminderIds = this.reminders.filter(r => r.id).map(r => r.id!);
     this.reminderCompletions.clear();
+    this.reminderSkips.clear();
     if (reminderIds.length > 0) {
       const { data: compRows } = await supabase
         .from('reminder_completions')
@@ -427,6 +428,15 @@ class AppState {
         .eq('completion_date', today);
       for (const row of (compRows || []) as ReminderCompletionRow[]) {
         this.reminderCompletions.add(row.reminder_id);
+      }
+
+      const { data: skipRows } = await supabase
+        .from('reminder_skips')
+        .select('reminder_id')
+        .in('reminder_id', reminderIds)
+        .eq('skip_date', today);
+      for (const row of (skipRows || []) as { reminder_id: string }[]) {
+        this.reminderSkips.add(row.reminder_id);
       }
     }
   }
@@ -503,6 +513,29 @@ class AppState {
         .from('reminder_completions')
         .insert({ reminder_id: reminder.id, completion_date: today });
       this.reminderCompletions.add(reminder.id);
+    }
+  }
+
+  isReminderSkippedToday(reminder: Reminder): boolean {
+    return reminder.id ? this.reminderSkips.has(reminder.id) : false;
+  }
+
+  async toggleReminderSkip(reminder: Reminder): Promise<void> {
+    if (!reminder.id) return;
+    const today = getTodayDate();
+
+    if (this.reminderSkips.has(reminder.id)) {
+      await supabase
+        .from('reminder_skips')
+        .delete()
+        .eq('reminder_id', reminder.id)
+        .eq('skip_date', today);
+      this.reminderSkips.delete(reminder.id);
+    } else {
+      await supabase
+        .from('reminder_skips')
+        .insert({ reminder_id: reminder.id, skip_date: today });
+      this.reminderSkips.add(reminder.id);
     }
   }
 

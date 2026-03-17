@@ -69,14 +69,22 @@ serve(async () => {
       const diff = reminderMinutes - nowMinutes;
       if (diff < -5 || diff > 5) continue;
 
-      // 5. Check if already completed today
-      const { count } = await supabase
+      // 5. Check if already completed or skipped today
+      const { count: compCount } = await supabase
         .from('reminder_completions')
         .select('*', { count: 'exact', head: true })
         .eq('reminder_id', reminder.id)
         .eq('completion_date', localDate);
 
-      if (count && count > 0) continue;
+      if (compCount && compCount > 0) continue;
+
+      const { count: skipCount } = await supabase
+        .from('reminder_skips')
+        .select('*', { count: 'exact', head: true })
+        .eq('reminder_id', reminder.id)
+        .eq('skip_date', localDate);
+
+      if (skipCount && skipCount > 0) continue;
 
       // 6. Dedup: try insert, skip if already sent today
       const { error: dedupErr } = await supabase

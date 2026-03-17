@@ -171,6 +171,39 @@
   border-color: var(--accent);
 }
 
+.reminder-skip-btn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text-dim);
+  font-size: 0.7rem;
+  cursor: pointer;
+  font-family: inherit;
+  opacity: 0;
+  transition: all 0.15s;
+}
+
+.reminder-item:hover .reminder-skip-btn { opacity: 1; }
+
+.reminder-skip-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.reminder-item.reminder-skipped {
+  opacity: 0.4;
+}
+
+.reminder-item.reminder-skipped .reminder-name {
+  text-decoration: line-through;
+  font-style: italic;
+}
+
+.reminder-item.reminder-skipped .reminder-skip-btn {
+  opacity: 1;
+}
+
 .reminder-empty {
   color: var(--text-dim);
   font-size: 0.85rem;
@@ -223,5 +256,6 @@
 @media (max-width: 768px) {
   .reminder-item { padding: 10px 12px; gap: 10px; }
   .reminder-item .reminder-edit-btn { opacity: 1; }
+  .reminder-item .reminder-skip-btn { opacity: 1; }
   .reminder-manage-item .reminder-edit-btn { opacity: 1; }
 }

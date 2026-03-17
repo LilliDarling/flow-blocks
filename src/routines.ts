@@ -12,12 +12,11 @@ let lastScheduledDate: string = '';
 export function renderReminders(): void {
   const dayIndex = getTodayIndex();
 
-  // --- Today's reminders (excluding dismissed) ---
-  const todayReminders = state.reminders.filter(r =>
-    r.days.includes(dayIndex) && !(r.id && state.reminderDismissals.has(r.id))
-  );
-  const completedCount = todayReminders.filter(r => state.isReminderCompletedToday(r)).length;
-  const totalCount = todayReminders.length;
+  // --- Today's reminders ---
+  const todayReminders = state.reminders.filter(r => r.days.includes(dayIndex));
+  const activeReminders = todayReminders.filter(r => !state.isReminderSkippedToday(r));
+  const completedCount = activeReminders.filter(r => state.isReminderCompletedToday(r)).length;
+  const totalCount = activeReminders.length;
 
   let progressHtml = '';
   if (totalCount > 0) {
@@ -35,13 +34,16 @@ export function renderReminders(): void {
     ? todayReminders.map(r => {
         const realIndex = state.reminders.indexOf(r);
         const done = state.isReminderCompletedToday(r);
-        return `<div class="reminder-item ${done ? 'reminder-done' : ''}" data-reminder-idx="${realIndex}">
+        const skipped = state.isReminderSkippedToday(r);
+        const cssClass = skipped ? 'reminder-skipped' : done ? 'reminder-done' : '';
+        return `<div class="reminder-item ${cssClass}" data-reminder-idx="${realIndex}">
           <button class="reminder-check" data-reminder-toggle="${realIndex}">${done ? '✓' : ''}</button>
           <span class="reminder-icon">${r.icon || '💊'}</span>
           <div class="reminder-info">
             <span class="reminder-name">${r.name}</span>
             <span class="reminder-time">${fmtTime(r.time)}</span>
           </div>
+          <button class="reminder-skip-btn" data-reminder-skip="${realIndex}">${skipped ? 'Undo' : 'Skip'}</button>
           <button class="reminder-edit-btn" data-reminder-edit="${realIndex}">Edit</button>
         </div>`;
       }).join('')
@@ -65,6 +67,7 @@ export function scheduleReminders(fireMissed = false): void {
   for (const reminder of state.reminders) {
     if (!reminder.days.includes(dayIndex)) continue;
     if (state.isReminderCompletedToday(reminder)) continue;
+    if (state.isReminderSkippedToday(reminder)) continue;
 
     const [h, m] = reminder.time.split(':').map(Number);
     const reminderDate = new Date();
@@ -173,8 +176,10 @@ async function deleteReminder(): Promise<void> {
   if (!choice) return;
 
   if (choice === 'this') {
-    // Dismiss this occurrence — hide from today's view
-    if (reminder.id) state.reminderDismissals.add(reminder.id);
+    // Skip this occurrence for today
+    if (!state.isReminderSkippedToday(reminder)) {
+      await state.toggleReminderSkip(reminder);
+    }
   } else {
     // 'future' or 'all' — delete the reminder
     await state.deleteReminder(editingReminderIndex);
@@ -193,6 +198,14 @@ async function toggleCompletion(index: number): Promise<void> {
   scheduleReminders();
 }
 
+async function skipReminder(index: number): Promise<void> {
+  const reminder = state.reminders[index];
+  if (!reminder) return;
+  await state.toggleReminderSkip(reminder);
+  renderReminders();
+  scheduleReminders();
+}
+
 export function initReminderEvents(): void {
   // Add reminder button
   $id('addReminderBtn').addEventListener('click', () => openReminderModal());
@@ -204,6 +217,12 @@ export function initReminderEvents(): void {
     const toggleBtn = target.closest('[data-reminder-toggle]') as HTMLElement | null;
     if (toggleBtn) {
       toggleCompletion(parseInt(toggleBtn.dataset.reminderToggle!));
+      return;
+    }
+
+    const skipBtn = target.closest('[data-reminder-skip]') as HTMLElement | null;
+    if (skipBtn) {
+      skipReminder(parseInt(skipBtn.dataset.reminderSkip!));
       return;
     }
 
