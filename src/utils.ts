@@ -180,7 +180,11 @@ export function blockFromRow(row: BlockRow): FlowBlock {
 }
 
 export function getTodayDate(): string {
-  return new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`; // local "YYYY-MM-DD"
 }
 
 export function doneItemFromRow(row: DoneItemRow): DoneItem {
@@ -212,7 +216,10 @@ export function getDateForDayIndex(dayIdx: number): string {
   const diff = dayIdx - todayIdx;
   const d = new Date(today);
   d.setDate(d.getDate() + diff);
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 export function $(selector: string): HTMLElement {

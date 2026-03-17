@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { DAYS, Reminder, fmtTime, getTodayIndex, $id } from './utils.js';
+import { DAYS, Reminder, fmtTime, getTodayIndex, getTodayDate, $id } from './utils.js';
 import { confirmDelete } from './confirm-delete.js';
 
 const DEFAULT_ICON = '💊';
@@ -7,6 +7,7 @@ const DEFAULT_ICON = '💊';
 let editingReminderIndex = -1;
 let selectedDays: number[] = [];
 let reminderTimers: ReturnType<typeof setTimeout>[] = [];
+let lastScheduledDate: string = '';
 
 export function renderReminders(): void {
   const dayIndex = getTodayIndex();
@@ -52,13 +53,14 @@ export function renderReminders(): void {
   renderManageList();
 }
 
-export function scheduleReminders(): void {
+export function scheduleReminders(fireMissed = false): void {
   // Clear existing timers
   reminderTimers.forEach(t => clearTimeout(t));
   reminderTimers = [];
 
   const dayIndex = getTodayIndex();
   const now = new Date();
+  lastScheduledDate = getTodayDate();
 
   for (const reminder of state.reminders) {
     if (!reminder.days.includes(dayIndex)) continue;
@@ -69,7 +71,14 @@ export function scheduleReminders(): void {
     reminderDate.setHours(h, m, 0, 0);
 
     const diff = reminderDate.getTime() - now.getTime();
-    if (diff <= 0) continue; // Already past
+
+    if (diff <= 0) {
+      // Already past — fire now if returning from background
+      if (fireMissed) {
+        showReminderNotification(reminder);
+      }
+      continue;
+    }
 
     const timer = setTimeout(() => {
       // Only notify if still not completed
@@ -238,6 +247,22 @@ export function initReminderEvents(): void {
 
   // Request notification permission on first interaction
   document.addEventListener('click', requestNotificationPermission, { once: true });
+
+  // Reschedule reminders when app regains focus (timers die when backgrounded)
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState !== 'visible') return;
+
+    const dateChanged = getTodayDate() !== lastScheduledDate;
+
+    if (dateChanged) {
+      // Day rolled over — reload completions from DB and re-render
+      await state.loadReminders();
+      renderReminders();
+    }
+
+    // Reschedule and fire any missed reminders
+    scheduleReminders(true);
+  });
 }
 
 function renderManageList(): void {
