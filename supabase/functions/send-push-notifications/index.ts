@@ -131,8 +131,9 @@ serve(async () => {
 
 /** Get minutes since midnight in the given timezone */
 function localMinutesSinceMidnight(date: Date, timezone: string): number {
-  const h = parseInt(date.toLocaleTimeString('en-GB', { timeZone: timezone, hour: '2-digit', hour12: false }));
-  const m = parseInt(date.toLocaleTimeString('en-GB', { timeZone: timezone, minute: '2-digit' }));
+  // Use a single toLocaleTimeString call to get "HH:MM" reliably
+  const timeStr = date.toLocaleTimeString('en-GB', { timeZone: timezone, hour: '2-digit', minute: '2-digit', hour12: false });
+  const [h, m] = timeStr.split(':').map(Number);
   return h * 60 + m;
 }
 

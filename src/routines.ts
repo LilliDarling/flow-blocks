@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { DAYS, Reminder, fmtTime, getTodayIndex, getTodayDate, $id } from './utils.js';
+import { DAYS, Reminder, ReminderTimeSuggestion, fmtTime, getTodayIndex, getTodayDate, $id } from './utils.js';
 import { confirmDelete } from './confirm-delete.js';
 
 const DEFAULT_ICON = '💊';
@@ -50,6 +50,9 @@ export function renderReminders(): void {
     : `<p class="reminder-empty">No reminders scheduled for today — tap "+ Add Reminder" to create one</p>`;
 
   $id('remindersList').innerHTML = progressHtml + listHtml;
+
+  // --- Time suggestions ---
+  renderTimeSuggestions();
 
   // --- All reminders list ---
   renderManageList();
@@ -264,6 +267,23 @@ export function initReminderEvents(): void {
     }
   });
 
+  // Suggestion card interactions (confirm / keep)
+  $id('reminderSuggestions').addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+
+    const confirmBtn = target.closest('[data-confirm-id]') as HTMLElement | null;
+    if (confirmBtn) {
+      acceptTimeSuggestion(confirmBtn.dataset.confirmId!, confirmBtn.dataset.newTime!);
+      return;
+    }
+
+    const keepBtn = target.closest('[data-keep-id]') as HTMLElement | null;
+    if (keepBtn) {
+      dismissTimeSuggestion(keepBtn.dataset.keepId!);
+      return;
+    }
+  });
+
   // Request notification permission on first interaction
   document.addEventListener('click', requestNotificationPermission, { once: true });
 
@@ -282,6 +302,61 @@ export function initReminderEvents(): void {
     // Reschedule and fire any missed reminders
     scheduleReminders(true);
   });
+}
+
+function renderTimeSuggestions(): void {
+  const container = $id('reminderSuggestions');
+  if (!container) return;
+
+  const suggestions = state.getReminderTimeSuggestions();
+  if (suggestions.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="reminder-suggestions-header">
+      <h4>Suggested Time Adjustments</h4>
+      <p class="reminder-suggestions-sub">Based on your last 7 days of activity</p>
+    </div>
+    ${suggestions.map(s => `
+      <div class="reminder-suggestion-card" data-suggestion-id="${s.reminderId}">
+        <div class="suggestion-info">
+          <span class="reminder-icon">${s.reminderIcon}</span>
+          <div>
+            <span class="suggestion-name">${s.reminderName}</span>
+            <span class="suggestion-detail">
+              Scheduled at <strong>${fmtTime(s.scheduledTime)}</strong> — you usually complete it around <strong>${fmtTime(s.avgCompletionTime)}</strong>
+            </span>
+            <span class="suggestion-detail suggestion-data-points">${s.dataPoints} data points over 7 days</span>
+          </div>
+        </div>
+        <div class="suggestion-actions">
+          <button class="btn btn-primary suggestion-confirm-btn" data-confirm-id="${s.reminderId}" data-new-time="${s.suggestedTime}">
+            Switch to ${fmtTime(s.suggestedTime)}
+          </button>
+          <button class="btn btn-ghost suggestion-keep-btn" data-keep-id="${s.reminderId}">
+            Keep as is
+          </button>
+        </div>
+      </div>
+    `).join('')}`;
+}
+
+async function acceptTimeSuggestion(reminderId: string, newTime: string): Promise<void> {
+  const index = state.reminders.findIndex(r => r.id === reminderId);
+  if (index < 0) return;
+
+  const reminder = state.reminders[index];
+  await state.updateReminder(index, { ...reminder, time: newTime });
+  state.dismissedSuggestions.add(reminderId);
+  renderReminders();
+  scheduleReminders();
+}
+
+function dismissTimeSuggestion(reminderId: string): void {
+  state.dismissedSuggestions.add(reminderId);
+  renderTimeSuggestions();
 }
 
 function renderManageList(): void {

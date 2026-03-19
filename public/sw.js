@@ -1,4 +1,4 @@
-const CACHE_NAME = 'flowblocks-v4';
+const CACHE_NAME = 'flowblocks-v1.1';
 const PRECACHE = [
   '/',
   '/css/base.css',
@@ -40,19 +40,18 @@ self.addEventListener('message', (e) => {
 self.addEventListener('push', (e) => {
   if (!e.data) return;
 
-  e.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      // Skip if the app is focused — client-side notification handles it
-      const appIsFocused = windowClients.some((c) => c.visibilityState === 'visible');
-      if (appIsFocused) return;
+  // Always show the notification — the `tag` field deduplicates naturally.
+  // Skipping when focused violates `userVisibleOnly` and causes mobile browsers
+  // to throttle or revoke the push subscription.
+  let data;
+  try { data = e.data.json(); } catch { data = { title: 'Flow Blocks', body: e.data.text() }; }
 
-      const data = e.data.json();
-      return self.registration.showNotification(data.title || 'Flow Blocks', {
-        body: data.body || '',
-        icon: data.icon || '/icons/icon.svg',
-        tag: data.tag || 'reminder',
-        data: { url: data.url || '/' },
-      });
+  e.waitUntil(
+    self.registration.showNotification(data.title || 'Flow Blocks', {
+      body: data.body || '',
+      icon: data.icon || '/icons/icon.svg',
+      tag: data.tag || 'reminder',
+      data: { url: data.url || '/' },
     })
   );
 });

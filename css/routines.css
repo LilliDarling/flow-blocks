@@ -253,9 +253,83 @@
   border-color: var(--accent);
 }
 
+/* Time suggestion cards */
+.reminder-suggestions-header {
+  margin-top: 20px;
+  margin-bottom: 12px;
+}
+
+.reminder-suggestions-header h4 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--accent);
+  margin: 0;
+}
+
+.reminder-suggestions-sub {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin: 2px 0 0;
+}
+
+.reminder-suggestion-card {
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  margin-bottom: 10px;
+}
+
+.suggestion-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.suggestion-info .reminder-icon {
+  margin-top: 2px;
+}
+
+.suggestion-name {
+  display: block;
+  font-size: 0.92rem;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.suggestion-detail {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+.suggestion-data-points {
+  font-size: 0.7rem;
+  opacity: 0.6;
+  margin-top: 2px;
+}
+
+.suggestion-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.suggestion-confirm-btn {
+  font-size: 0.78rem !important;
+  padding: 6px 14px !important;
+}
+
+.suggestion-keep-btn {
+  font-size: 0.78rem !important;
+  padding: 6px 14px !important;
+}
+
 @media (max-width: 768px) {
   .reminder-item { padding: 10px 12px; gap: 10px; }
   .reminder-item .reminder-edit-btn { opacity: 1; }
   .reminder-item .reminder-skip-btn { opacity: 1; }
   .reminder-manage-item .reminder-edit-btn { opacity: 1; }
+  .suggestion-actions { flex-direction: column; }
 }

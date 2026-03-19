@@ -134,6 +134,17 @@ export interface ReminderCompletionRow {
   completed_at: string;
 }
 
+/** A suggestion to reschedule a reminder based on actual completion patterns. */
+export interface ReminderTimeSuggestion {
+  reminderId: string;
+  reminderName: string;
+  reminderIcon: string;
+  scheduledTime: string;   // "HH:MM" — current scheduled time
+  suggestedTime: string;   // "HH:MM" — optimal time based on 7-day data
+  avgCompletionTime: string; // "HH:MM" — average actual completion time
+  dataPoints: number;       // how many completions the suggestion is based on
+}
+
 export function reminderFromRow(row: ReminderRow): Reminder {
   return {
     id: row.id,

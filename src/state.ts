@@ -2,7 +2,7 @@ import { supabase } from './supabase.js';
 import {
   FlowBlock, DoneItem, PomoMode, PomoSettings, PomoSession, PomoSessionRow,
   BlockStatus, CompletionRow, EnergyLogRow,
-  Reminder, ReminderRow, ReminderCompletionRow, reminderFromRow,
+  Reminder, ReminderRow, ReminderCompletionRow, ReminderTimeSuggestion, reminderFromRow,
   blockFromRow, doneItemFromRow, getTodayDate,
 } from './utils.js';
 import {
@@ -46,6 +46,8 @@ class AppState {
   reminders: Reminder[] = [];
   reminderCompletions: Set<string> = new Set(); // reminder IDs completed today
   reminderSkips: Set<string> = new Set(); // reminder IDs skipped today (persisted)
+  reminderCompletionHistory: ReminderCompletionRow[] = []; // last 7 days
+  dismissedSuggestions: Set<string> = new Set(); // reminder IDs whose suggestions were dismissed this session
   editingIndex = -1;
   selectedType = '';
   selectedDays: number[] = [];
@@ -439,6 +441,9 @@ class AppState {
         this.reminderSkips.add(row.reminder_id);
       }
     }
+
+    // Load 7-day completion history for time suggestions
+    await this.loadReminderCompletionHistory();
   }
 
   async addReminder(reminder: Reminder): Promise<void> {
@@ -537,6 +542,83 @@ class AppState {
         .insert({ reminder_id: reminder.id, skip_date: today });
       this.reminderSkips.add(reminder.id);
     }
+  }
+
+  /** Load the last 7 days of reminder completion timestamps. */
+  async loadReminderCompletionHistory(): Promise<void> {
+    const since = new Date();
+    since.setDate(since.getDate() - 7);
+    const sinceDate = since.toISOString().slice(0, 10);
+
+    const reminderIds = this.reminders.filter(r => r.id).map(r => r.id!);
+    if (reminderIds.length === 0) {
+      this.reminderCompletionHistory = [];
+      return;
+    }
+
+    const { data } = await supabase
+      .from('reminder_completions')
+      .select('*')
+      .in('reminder_id', reminderIds)
+      .gte('completion_date', sinceDate)
+      .order('completed_at');
+
+    this.reminderCompletionHistory = (data || []) as ReminderCompletionRow[];
+  }
+
+  /** Compute optimal time suggestions based on 7-day completion history.
+   *  Only suggests if there are 3+ data points and the average differs by 15+ minutes. */
+  getReminderTimeSuggestions(): ReminderTimeSuggestion[] {
+    const suggestions: ReminderTimeSuggestion[] = [];
+
+    for (const reminder of this.reminders) {
+      if (!reminder.id || this.dismissedSuggestions.has(reminder.id)) continue;
+
+      // Get completions for this reminder
+      const completions = this.reminderCompletionHistory.filter(
+        c => c.reminder_id === reminder.id
+      );
+
+      if (completions.length < 3) continue;
+
+      // Compute average completion time-of-day in minutes
+      let totalMinutes = 0;
+      for (const c of completions) {
+        const dt = new Date(c.completed_at);
+        totalMinutes += dt.getHours() * 60 + dt.getMinutes();
+      }
+      const avgMinutes = Math.round(totalMinutes / completions.length);
+
+      // Parse scheduled time
+      const [sh, sm] = reminder.time.split(':').map(Number);
+      const scheduledMinutes = sh * 60 + sm;
+
+      // Only suggest if the difference is 15+ minutes
+      const diff = Math.abs(avgMinutes - scheduledMinutes);
+      if (diff < 15) continue;
+
+      // Round suggested time to nearest 5 minutes
+      const rounded = Math.round(avgMinutes / 5) * 5;
+      const sugH = Math.floor(rounded / 60) % 24;
+      const sugM = rounded % 60;
+      const suggestedTime = `${sugH.toString().padStart(2, '0')}:${sugM.toString().padStart(2, '0')}`;
+
+      const avgH = Math.floor(avgMinutes / 60) % 24;
+      const avgM = avgMinutes % 60;
+      const avgTime = `${avgH.toString().padStart(2, '0')}:${avgM.toString().padStart(2, '0')}`;
+
+      suggestions.push({
+        reminderId: reminder.id,
+        reminderName: reminder.name,
+        reminderIcon: reminder.icon || '💊',
+        scheduledTime: reminder.time,
+        suggestedTime,
+        avgCompletionTime: avgTime,
+        dataPoints: completions.length,
+      });
+    }
+
+    return suggestions;
   }
 
   // --- UI ---
