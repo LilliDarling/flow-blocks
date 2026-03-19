@@ -134,6 +134,43 @@
   justify-content: center;
 }
 
+/* Menu suggestion chips */
+.menu-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.menu-suggestions-label {
+  width: 100%;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+}
+
+.menu-chip {
+  padding: 4px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.menu-chip:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.menu-chip-personal {
+  border-color: var(--accent);
+  background: rgba(124, 111, 247, 0.08);
+}
+
 @media (max-width: 768px) {
   .modal {
     padding: 20px 16px;

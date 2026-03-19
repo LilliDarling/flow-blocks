@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { DAYS, BlockType, FlowBlock, fmtTime, addMinutes, $id, getTodayIndex, getTodayDate, getDateForDayIndex, TYPE_LABELS, BLOCK_TYPE_KEYWORDS } from './utils.js';
+import { DAYS, BlockType, FlowBlock, fmtTime, addMinutes, $id, getTodayIndex, getTodayDate, getDateForDayIndex, TYPE_LABELS, BLOCK_TYPE_KEYWORDS, BLOCK_MENU_SUGGESTIONS } from './utils.js';
 import { renderTimeline } from './timeline.js';
 import { renderWeek } from './week.js';
 import { confirmDelete } from './confirm-delete.js';
@@ -96,6 +96,12 @@ export function openModal(index = -1): void {
 
   renderDayPickers();
   renderTypeSelection();
+  // Show menu suggestions if editing a block with a known type
+  if (state.selectedType) {
+    renderMenuSuggestions(state.selectedType as BlockType);
+  } else {
+    $id('menuSuggestions').innerHTML = '';
+  }
   $id('modal').classList.add('open');
 }
 
@@ -126,6 +132,68 @@ function selectType(type: string): void {
   state.selectedType = type;
   suggestedType = null;
   renderTypeSelection();
+  renderMenuSuggestions(type as BlockType);
+}
+
+function renderMenuSuggestions(type: BlockType): void {
+  const container = $id('menuSuggestions');
+  if (!container) return;
+
+  const menuInput = $id('blockMenu') as HTMLTextAreaElement;
+  const currentItems = menuInput.value.split('\n').map(s => s.trim().toLowerCase()).filter(Boolean);
+
+  // Get user's past menu items for this block type (deduplicated)
+  const pastItems = new Set<string>();
+  for (const block of state.blocks) {
+    if (block.type === type && block.menu) {
+      for (const item of block.menu) {
+        if (!currentItems.includes(item.toLowerCase())) {
+          pastItems.add(item);
+        }
+      }
+    }
+  }
+
+  // Combine: user's past items first, then defaults (skip duplicates and already-added items)
+  const suggestions: string[] = [];
+  const seen = new Set<string>();
+
+  for (const item of pastItems) {
+    const key = item.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      suggestions.push(item);
+    }
+  }
+
+  for (const item of (BLOCK_MENU_SUGGESTIONS[type] || [])) {
+    const key = item.toLowerCase();
+    if (!seen.has(key) && !currentItems.includes(key)) {
+      seen.add(key);
+      suggestions.push(item);
+    }
+  }
+
+  if (suggestions.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  const pastCount = pastItems.size;
+  container.innerHTML =
+    `<div class="menu-suggestions-label">Tap to add:</div>` +
+    suggestions.map((s, i) =>
+      `<button type="button" class="menu-chip${i < pastCount ? ' menu-chip-personal' : ''}" data-menu-item="${s.replace(/"/g, '&quot;')}">${s}</button>`
+    ).join('');
+}
+
+function addMenuSuggestion(item: string): void {
+  const menuInput = $id('blockMenu') as HTMLTextAreaElement;
+  const current = menuInput.value.trim();
+  menuInput.value = current ? current + '\n' + item : item;
+  // Re-render to remove the added chip
+  const type = (state.selectedType || suggestedType) as BlockType;
+  if (type) renderMenuSuggestions(type);
 }
 
 let suggestedType: BlockType | null = null;
@@ -142,9 +210,14 @@ function onTitleInput(): void {
   suggestTimeout = setTimeout(() => {
     const title = ($id('blockTitle') as HTMLInputElement).value.trim();
     suggestedType = title.length >= 2 ? suggestBlockType(title) : null;
-    // Only show suggestion highlight if user hasn't manually picked a type yet
+    // Only show suggestion highlight and menu suggestions if user hasn't manually picked a type yet
     if (!state.selectedType) {
       renderTypeSelection();
+      if (suggestedType) {
+        renderMenuSuggestions(suggestedType);
+      } else {
+        $id('menuSuggestions').innerHTML = '';
+      }
     }
   }, 300);
 }
@@ -304,6 +377,12 @@ export function initModalEvents(): void {
 
   // Title input for block type suggestion
   $id('blockTitle').addEventListener('input', onTitleInput);
+
+  // Menu suggestion chips
+  $id('menuSuggestions').addEventListener('click', (e) => {
+    const chip = (e.target as HTMLElement).closest('[data-menu-item]') as HTMLElement | null;
+    if (chip) addMenuSuggestion(chip.dataset.menuItem!);
+  });
 
   $id('saveBtn').addEventListener('click', saveBlock);
   $id('deleteBtn').addEventListener('click', deleteBlock);

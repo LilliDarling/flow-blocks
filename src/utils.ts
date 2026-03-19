@@ -39,6 +39,38 @@ export function energySuggestion(energy: number): string {
 }
 
 /** Keyword map for auto-suggesting block types from task titles. */
+/** Suggested menu items per block type — things that match the energy demand of each type. */
+export const BLOCK_MENU_SUGGESTIONS: Record<BlockType, string[]> = {
+  deep: [
+    'Write report or proposal', 'Deep research', 'Coding / programming',
+    'Study session', 'Strategic planning', 'Creative writing',
+    'Design work', 'Data analysis', 'Build or prototype',
+  ],
+  light: [
+    'Review documents', 'Brainstorm ideas', 'Read articles',
+    'Outline next steps', 'Light editing', 'Team check-in',
+    'Sketch or wireframe', 'Catch up on Slack/messages', 'Watch training video',
+  ],
+  admin: [
+    'Process emails', 'Pay bills / invoices', 'Schedule appointments',
+    'File paperwork', 'Grocery list', 'Update spreadsheets',
+    'Tidy desk / workspace', 'Sort notifications', 'Return calls',
+  ],
+  recharge: [
+    'Go for a walk', 'Stretch or yoga', 'Workout / gym',
+    'Meditate', 'Cook or bake', 'Craft or draw',
+    'Play music', 'Garden', 'Take a power nap',
+  ],
+  flex: [
+    'Whatever feels right', 'Catch up on anything', 'Tackle the smallest task',
+    'Side project', 'Learn something new', 'Organize digital files',
+  ],
+  buffer: [
+    'Transition wind-down', 'Quick snack or water', 'Review what\'s next',
+    'Bathroom / stretch break', 'Jot down loose thoughts',
+  ],
+};
+
 export const BLOCK_TYPE_KEYWORDS: Record<string, BlockType> = {
   // Deep focus
   write: 'deep', code: 'deep', coding: 'deep', design: 'deep', research: 'deep',
