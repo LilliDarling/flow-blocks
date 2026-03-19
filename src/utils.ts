@@ -9,6 +9,18 @@ export const TYPE_LABELS: Record<BlockType, string> = {
   buffer: 'Buffer',
 };
 
+export type EnergyTier = 'low' | 'med' | 'high';
+
+/** Map tiers to numeric values for storage (compatible with existing energy_logs). */
+export const ENERGY_TIER_VALUE: Record<EnergyTier, number> = { low: 2, med: 5, high: 8 };
+
+/** Map a numeric value back to the nearest tier. */
+export function valueToTier(v: number): EnergyTier {
+  if (v <= 3) return 'low';
+  if (v <= 6) return 'med';
+  return 'high';
+}
+
 /** Energy ranges where each block type is a good fit: [min, max] inclusive (1-10 scale). */
 export const ENERGY_FIT: Record<BlockType, [number, number]> = {
   deep:     [7, 10],
@@ -25,6 +37,31 @@ export function energySuggestion(energy: number): string {
   if (energy <= 6) return 'Moderate energy — light tasks and admin are your sweet spot right now.';
   return 'High energy — great time for deep focus. Ride the wave!';
 }
+
+/** Keyword map for auto-suggesting block types from task titles. */
+export const BLOCK_TYPE_KEYWORDS: Record<string, BlockType> = {
+  // Deep focus
+  write: 'deep', code: 'deep', coding: 'deep', design: 'deep', research: 'deep',
+  study: 'deep', plan: 'deep', planning: 'deep', analyze: 'deep', develop: 'deep',
+  program: 'deep', programming: 'deep', essay: 'deep', report: 'deep', thesis: 'deep',
+  // Light tasks
+  read: 'light', review: 'light', brainstorm: 'light', sketch: 'light',
+  meeting: 'light', call: 'light', chat: 'light', discuss: 'light',
+  edit: 'light', proofread: 'light', outline: 'light',
+  // Admin
+  email: 'admin', emails: 'admin', invoice: 'admin', expense: 'admin', bill: 'admin',
+  clean: 'admin', organize: 'admin', errands: 'admin', laundry: 'admin',
+  dishes: 'admin', grocery: 'admin', groceries: 'admin', file: 'admin',
+  paperwork: 'admin', appointment: 'admin', schedule: 'admin',
+  // Recharge
+  workout: 'recharge', exercise: 'recharge', gym: 'recharge', walk: 'recharge',
+  yoga: 'recharge', stretch: 'recharge', meditate: 'recharge', meditation: 'recharge',
+  nap: 'recharge', rest: 'recharge', break: 'recharge', craft: 'recharge',
+  crafting: 'recharge', draw: 'recharge', drawing: 'recharge', paint: 'recharge',
+  painting: 'recharge', music: 'recharge', play: 'recharge', game: 'recharge',
+  garden: 'recharge', gardening: 'recharge', cook: 'recharge', cooking: 'recharge',
+  bake: 'recharge', baking: 'recharge',
+};
 
 export type BlockType = 'deep' | 'light' | 'admin' | 'recharge' | 'flex' | 'buffer';
 export type BlockStatus = 'pending' | 'done' | 'skipped' | 'dismissed';

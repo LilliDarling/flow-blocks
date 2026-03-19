@@ -1,5 +1,9 @@
 import { state } from './state.js';
-import { $id, energySuggestion } from './utils.js';
+import {
+  $id, EnergyTier, ENERGY_TIER_VALUE, ENERGY_FIT,
+  energySuggestion, valueToTier, fmtTime, addMinutes, getTodayIndex, getTodayDate,
+  FlowBlock, TYPE_LABELS,
+} from './utils.js';
 import { renderTimeline, initTimelineEvents } from './timeline.js';
 import { renderWeek, initWeekEvents } from './week.js';
 import { renderEnergyAnalytics } from './energy.js';
@@ -17,6 +21,11 @@ import { subscribeToPush } from './push.js';
 type TabName = 'day' | 'week' | 'routines' | 'pomo' | 'energy' | 'tips';
 const TAB_ORDER: TabName[] = ['day', 'week', 'routines', 'pomo', 'energy', 'tips'];
 
+// --- Energy check-in timer ---
+const CHECKIN_INTERVAL_MS = 2 * 60 * 60 * 1000; // 2 hours
+let checkinTimer: ReturnType<typeof setTimeout> | null = null;
+let lastEnergyLogTime = 0;
+
 function switchTab(tab: TabName): void {
   document.querySelectorAll('.tab-btn').forEach((btn, i) => {
     btn.classList.toggle('active', TAB_ORDER[i] === tab);
@@ -30,37 +39,137 @@ function switchTab(tab: TabName): void {
   if (tab === 'energy') renderEnergyAnalytics();
 }
 
-function updateEnergyUI(val: string): void {
-  const v = parseInt(val);
-  state.energy = v;
+// --- Energy tier UI ---
 
-  // Update value display
-  const el = $id('energyVal');
-  el.textContent = val;
-  if (v <= 3) el.style.color = '#ef4444';
-  else if (v <= 6) el.style.color = '#f59e0b';
-  else el.style.color = '#34d399';
+function setEnergyTier(tier: EnergyTier, log = true): void {
+  const value = ENERGY_TIER_VALUE[tier];
+  state.energy = value;
+
+  // Highlight active button
+  document.querySelectorAll<HTMLElement>('.energy-check .energy-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.energy === tier);
+  });
 
   // Update suggestion banner
   const banner = $id('energySuggestion');
-  banner.textContent = energySuggestion(v);
-  banner.className = 'energy-suggestion ' + (v <= 3 ? 'low' : v <= 6 ? 'mid' : 'high');
+  banner.textContent = energySuggestion(value);
+  banner.className = 'energy-suggestion ' + (tier === 'low' ? 'low' : tier === 'med' ? 'mid' : 'high');
 
   // Re-render timeline so block highlights update
   renderTimeline();
+
+  if (log) {
+    state.logEnergy(value);
+    lastEnergyLogTime = Date.now();
+    hideCheckinToast();
+    showReorderSuggestion(value);
+    scheduleEnergyCheckin();
+  }
 }
 
-let energyLogTimeout: ReturnType<typeof setTimeout> | null = null;
-let lastLoggedEnergy: number | null = null;
-function logEnergy(value: number): void {
-  if (energyLogTimeout) clearTimeout(energyLogTimeout);
-  energyLogTimeout = setTimeout(() => {
-    if (value !== lastLoggedEnergy) {
-      lastLoggedEnergy = value;
-      state.logEnergy(value);
+// --- Reorder suggestion ---
+
+function showReorderSuggestion(energy: number): void {
+  const container = $id('reorderSuggestion');
+  const today = getTodayDate();
+  const dayIdx = getTodayIndex();
+  const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
+
+  // Get today's pending blocks that haven't started yet
+  const pendingBlocks = state.blocks.filter(b => {
+    const isToday = b.date === today || (!b.date && b.days.includes(dayIdx));
+    if (!isToday) return false;
+    const status = state.getEffectiveStatus(b, today);
+    if (status !== 'pending') return false;
+    const [h, m] = b.start.split(':').map(Number);
+    return h * 60 + m > nowMinutes;
+  });
+
+  if (pendingBlocks.length < 2) {
+    container.style.display = 'none';
+    return;
+  }
+
+  // Find the next pending block
+  const nextBlock = pendingBlocks[0];
+  const [eMin, eMax] = ENERGY_FIT[nextBlock.type];
+  const isGoodFit = energy >= eMin && energy <= eMax;
+
+  if (isGoodFit) {
+    container.style.display = 'none';
+    return;
+  }
+
+  // Find a better-fitting block among the remaining pending blocks
+  const betterBlock = pendingBlocks.slice(1).find(b => {
+    const [bMin, bMax] = ENERGY_FIT[b.type];
+    return energy >= bMin && energy <= bMax;
+  });
+
+  if (!betterBlock) {
+    container.style.display = 'none';
+    return;
+  }
+
+  const nextLabel = nextBlock.title || TYPE_LABELS[nextBlock.type];
+  const betterLabel = betterBlock.title || TYPE_LABELS[betterBlock.type];
+
+  container.innerHTML = `
+    <div class="reorder-suggestion-text">
+      Your energy is ${valueToTier(energy)} right now.
+      <strong>${betterLabel}</strong> (${fmtTime(betterBlock.start)}) might be a better fit —
+      swap it with <strong>${nextLabel}</strong> (${fmtTime(nextBlock.start)})?
+    </div>
+    <div class="reorder-suggestion-actions">
+      <button class="btn btn-primary" id="reorderAccept">Swap them</button>
+      <button class="btn btn-ghost" id="reorderDismiss">Keep as is</button>
+    </div>`;
+  container.style.display = 'block';
+
+  $id('reorderAccept').addEventListener('click', async () => {
+    // Swap start times
+    const nextIdx = state.blocks.indexOf(nextBlock);
+    const betterIdx = state.blocks.indexOf(betterBlock);
+    if (nextIdx >= 0 && betterIdx >= 0) {
+      const tempStart = nextBlock.start;
+      await state.updateBlock(nextIdx, { ...nextBlock, start: betterBlock.start });
+      await state.updateBlock(betterIdx, { ...betterBlock, start: tempStart });
+      renderTimeline();
+      renderWeek();
     }
-  }, 2000);
+    container.style.display = 'none';
+  });
+
+  $id('reorderDismiss').addEventListener('click', () => {
+    container.style.display = 'none';
+  });
 }
+
+// --- Energy check-in toast ---
+
+function scheduleEnergyCheckin(): void {
+  if (checkinTimer) clearTimeout(checkinTimer);
+  checkinTimer = setTimeout(() => showCheckinToast(), CHECKIN_INTERVAL_MS);
+}
+
+function showCheckinToast(): void {
+  const h = new Date().getHours();
+  if (h < 9 || h >= 21) {
+    // Outside 9AM-9PM — schedule for next window
+    scheduleEnergyCheckin();
+    return;
+  }
+
+  const toast = $id('energyCheckinToast');
+  toast.style.display = 'flex';
+}
+
+function hideCheckinToast(): void {
+  const toast = $id('energyCheckinToast');
+  if (toast) toast.style.display = 'none';
+}
+
+// --- Init ---
 
 function initUI(): void {
   // Tab switching
@@ -68,11 +177,21 @@ function initUI(): void {
     btn.addEventListener('click', () => switchTab(TAB_ORDER[i]));
   });
 
-  // Energy slider — 'input' for live UI updates, 'change' for DB logging
-  const slider = $id('energySlider') as HTMLInputElement;
-  slider.addEventListener('input', () => updateEnergyUI(slider.value));
-  slider.addEventListener('change', () => logEnergy(parseInt(slider.value)));
-  updateEnergyUI(slider.value);
+  // Energy tier buttons
+  $id('energyButtons').addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest('[data-energy]') as HTMLElement | null;
+    if (btn) setEnergyTier(btn.dataset.energy as EnergyTier);
+  });
+
+  // Energy check-in toast buttons
+  $id('energyCheckinToast').addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest('[data-checkin]') as HTMLElement | null;
+    if (btn) setEnergyTier(btn.dataset.checkin as EnergyTier);
+  });
+  $id('checkinDismiss').addEventListener('click', () => {
+    hideCheckinToast();
+    scheduleEnergyCheckin();
+  });
 
   // Add block button
   $id('addBlockBtn').addEventListener('click', () => openModal());
@@ -94,16 +213,29 @@ async function onUserSignedIn(userId: string): Promise<void> {
   // Load all data while splash screen is still visible
   await state.load(userId);
 
-  // Restore energy slider to last logged value before initUI reads it
-  const slider = $id('energySlider') as HTMLInputElement;
-  slider.value = String(state.energy);
-  lastLoggedEnergy = state.energy;
+  // Restore energy tier from last logged value
+  const tier = valueToTier(state.energy);
 
   if (!uiInitialized) {
     initUI();
     uiInitialized = true;
+  }
+
+  setEnergyTier(tier, false);
+
+  // Determine last energy log time for check-in scheduling
+  if (state.energyLogs.length > 0) {
+    const lastLog = state.energyLogs[state.energyLogs.length - 1];
+    lastEnergyLogTime = new Date(lastLog.logged_at).getTime();
+  }
+
+  // Schedule first energy check-in based on time since last log
+  const elapsed = Date.now() - lastEnergyLogTime;
+  if (elapsed >= CHECKIN_INTERVAL_MS) {
+    // It's been 2+ hours — prompt soon (10 seconds after load)
+    checkinTimer = setTimeout(() => showCheckinToast(), 10_000);
   } else {
-    updateEnergyUI(slider.value);
+    checkinTimer = setTimeout(() => showCheckinToast(), CHECKIN_INTERVAL_MS - elapsed);
   }
 
   // Check if we're returning from a calendar OAuth redirect
@@ -124,6 +256,17 @@ async function onUserSignedIn(userId: string): Promise<void> {
     showCalendarSyncDialog();
   }
 }
+
+// Reschedule check-in timer when app regains focus
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  if (!lastEnergyLogTime) return;
+
+  const elapsed = Date.now() - lastEnergyLogTime;
+  if (elapsed >= CHECKIN_INTERVAL_MS) {
+    showCheckinToast();
+  }
+});
 
 document.addEventListener('DOMContentLoaded', () => {
   initPWA();

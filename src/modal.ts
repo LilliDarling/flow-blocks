@@ -1,10 +1,29 @@
 import { state } from './state.js';
-import { DAYS, BlockType, FlowBlock, fmtTime, addMinutes, $id, getTodayIndex, getTodayDate, getDateForDayIndex, TYPE_LABELS } from './utils.js';
+import { DAYS, BlockType, FlowBlock, fmtTime, addMinutes, $id, getTodayIndex, getTodayDate, getDateForDayIndex, TYPE_LABELS, BLOCK_TYPE_KEYWORDS } from './utils.js';
 import { renderTimeline } from './timeline.js';
 import { renderWeek } from './week.js';
 import { confirmDelete } from './confirm-delete.js';
 
 let scheduleMode: 'today' | 'recurring' = 'today';
+let suggestTimeout: ReturnType<typeof setTimeout> | null = null;
+
+/** Suggest a block type based on title keywords and user history. */
+function suggestBlockType(title: string): BlockType | null {
+  const words = title.toLowerCase().split(/\s+/);
+
+  // 1. Check user's own history first (exact title match)
+  const existing = state.blocks.find(
+    b => b.title.toLowerCase() === title.toLowerCase() && b.title.length > 0
+  );
+  if (existing) return existing.type;
+
+  // 2. Keyword match
+  for (const word of words) {
+    if (BLOCK_TYPE_KEYWORDS[word]) return BLOCK_TYPE_KEYWORDS[word];
+  }
+
+  return null;
+}
 
 function populateTimeOptions(): void {
   const sel = $id('blockStart') as HTMLSelectElement;
@@ -36,6 +55,7 @@ export function openModal(index = -1): void {
   state.editingIndex = index;
   state.selectedType = '';
   state.selectedDays = [];
+  suggestedType = null;
 
   $id('deleteBtn').style.display = index >= 0 ? 'block' : 'none';
   $id('modalTitle').textContent = index >= 0 ? 'Edit Block' : 'Add Flow Block';
@@ -104,13 +124,29 @@ export function closeModal(): void {
 
 function selectType(type: string): void {
   state.selectedType = type;
+  suggestedType = null;
   renderTypeSelection();
 }
+
+let suggestedType: BlockType | null = null;
 
 function renderTypeSelection(): void {
   document.querySelectorAll<HTMLElement>('.type-option[data-type]').forEach(btn => {
     btn.classList.toggle('selected', btn.dataset.type === state.selectedType);
+    btn.classList.toggle('suggested', !state.selectedType && btn.dataset.type === suggestedType);
   });
+}
+
+function onTitleInput(): void {
+  if (suggestTimeout) clearTimeout(suggestTimeout);
+  suggestTimeout = setTimeout(() => {
+    const title = ($id('blockTitle') as HTMLInputElement).value.trim();
+    suggestedType = title.length >= 2 ? suggestBlockType(title) : null;
+    // Only show suggestion highlight if user hasn't manually picked a type yet
+    if (!state.selectedType) {
+      renderTypeSelection();
+    }
+  }, 300);
 }
 
 function renderDayPickers(): void {
@@ -174,7 +210,9 @@ function findOverlap(start: string, duration: number, days: number[], date: stri
 }
 
 async function saveBlock(): Promise<void> {
-  if (!state.selectedType) {
+  // Use suggested type if user didn't explicitly pick one
+  const effectiveType = state.selectedType || suggestedType;
+  if (!effectiveType) {
     alert('Pick a block type!');
     return;
   }
@@ -202,7 +240,7 @@ async function saveBlock(): Promise<void> {
   }
 
   const block = {
-    type: state.selectedType as BlockType,
+    type: effectiveType as BlockType,
     title: ($id('blockTitle') as HTMLInputElement).value.trim(),
     menu: ($id('blockMenu') as HTMLTextAreaElement).value
       .split('\n').map(s => s.trim()).filter(Boolean),
@@ -263,6 +301,9 @@ export function initModalEvents(): void {
     const btn = (e.target as HTMLElement).closest('[data-day-pick]') as HTMLElement | null;
     if (btn) toggleDay(parseInt(btn.dataset.dayPick!));
   });
+
+  // Title input for block type suggestion
+  $id('blockTitle').addEventListener('input', onTitleInput);
 
   $id('saveBtn').addEventListener('click', saveBlock);
   $id('deleteBtn').addEventListener('click', deleteBlock);

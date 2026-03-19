@@ -216,7 +216,7 @@ class AppState {
     return this.completions.get(key) || 'pending';
   }
 
-  async updateBlockStatus(index: number, status: BlockStatus): Promise<void> {
+  async updateBlockStatus(index: number, status: BlockStatus, completedAt?: Date): Promise<void> {
     const existing = this.blocks[index];
     if (!existing?.id) return;
 
@@ -227,12 +227,15 @@ class AppState {
     } else {
       // Recurring block: upsert into block_completions for today
       const today = getTodayDate();
+      const row: Record<string, unknown> = {
+        block_id: existing.id,
+        completion_date: today,
+        status,
+      };
+      if (completedAt) row.completed_at = completedAt.toISOString();
       await supabase
         .from('block_completions')
-        .upsert(
-          { block_id: existing.id, completion_date: today, status },
-          { onConflict: 'block_id,completion_date' }
-        );
+        .upsert(row, { onConflict: 'block_id,completion_date' });
       this.completions.set(`${existing.id}_${today}`, status);
     }
   }

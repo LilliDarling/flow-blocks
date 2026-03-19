@@ -143,13 +143,17 @@
   <div class="day-controls">
     <div class="energy-check">
       <label>Energy right now:</label>
-      <input type="range" class="energy-slider" min="1" max="10" value="5" id="energySlider">
-      <span class="energy-val" id="energyVal">5</span>
+      <div class="energy-buttons" id="energyButtons">
+        <button class="energy-btn energy-low" data-energy="low">Low</button>
+        <button class="energy-btn energy-med" data-energy="med">Med</button>
+        <button class="energy-btn energy-high" data-energy="high">High</button>
+      </div>
     </div>
     <button class="add-block-btn" id="addBlockBtn">+ Add Block</button>
   </div>
 
   <div class="energy-suggestion" id="energySuggestion"></div>
+  <div class="reorder-suggestion" id="reorderSuggestion" style="display:none"></div>
   <div class="timeline" id="timeline"></div>
 
   <div class="done-list-section" id="doneSection" style="display:none">
@@ -462,6 +466,17 @@
       <button class="btn btn-primary" id="reminderSaveBtn">Save</button>
     </div>
   </div>
+</div>
+
+<!-- Energy check-in toast -->
+<div class="energy-checkin-toast" id="energyCheckinToast" style="display:none">
+  <span class="checkin-label">Quick energy check — how are you right now?</span>
+  <div class="checkin-buttons">
+    <button class="energy-btn energy-low" data-checkin="low">Low</button>
+    <button class="energy-btn energy-med" data-checkin="med">Med</button>
+    <button class="energy-btn energy-high" data-checkin="high">High</button>
+  </div>
+  <button class="checkin-dismiss" id="checkinDismiss">&times;</button>
 </div>
 
 <div class="save-banner" id="saveBanner">Changes saved</div>

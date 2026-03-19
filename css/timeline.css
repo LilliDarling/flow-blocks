@@ -21,30 +21,29 @@
 
 .energy-check label { color: var(--text-dim); }
 
-.energy-slider {
-  -webkit-appearance: none;
-  width: 120px;
-  height: 6px;
-  border-radius: 3px;
-  background: linear-gradient(to right, #ef4444, #f59e0b, #34d399);
-  outline: none;
+.energy-buttons {
+  display: flex;
+  gap: 6px;
 }
 
-.energy-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: white;
+.energy-btn {
+  padding: 6px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  font-weight: 500;
+  font-family: inherit;
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s;
 }
 
-.energy-val {
-  font-weight: 600;
-  min-width: 20px;
-  text-align: center;
-}
+.energy-btn:hover { border-color: var(--text-dim); }
+
+.energy-btn.energy-low.active  { background: rgba(239, 68, 68, 0.15); border-color: #ef4444; color: #ef4444; }
+.energy-btn.energy-med.active  { background: rgba(245, 158, 11, 0.15); border-color: #f59e0b; color: #f59e0b; }
+.energy-btn.energy-high.active { background: rgba(52, 211, 153, 0.15); border-color: #34d399; color: #34d399; }
 
 .energy-suggestion {
   max-width: 700px;
@@ -356,4 +355,150 @@
   font-size: 1.4rem;
   font-weight: 700;
   color: var(--recharge);
+}
+
+/* Reorder suggestion */
+.reorder-suggestion {
+  max-width: 700px;
+  margin: 0 auto 14px;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  font-size: 0.82rem;
+  border: 1px solid var(--accent);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.reorder-suggestion-text {
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
+.reorder-suggestion-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.reorder-suggestion-actions .btn {
+  font-size: 0.78rem;
+  padding: 5px 14px;
+}
+
+/* Energy check-in toast */
+.energy-checkin-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 16px;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+  z-index: 60;
+  max-width: 90vw;
+  animation: toast-slide-up 0.3s ease;
+}
+
+@keyframes toast-slide-up {
+  from { transform: translateX(-50%) translateY(20px); opacity: 0; }
+  to { transform: translateX(-50%) translateY(0); opacity: 1; }
+}
+
+.checkin-label {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.checkin-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.checkin-dismiss {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0 4px;
+  font-family: inherit;
+}
+
+/* Completion time prompt */
+.completion-time-prompt {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 110;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.completion-time-inner {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  max-width: 340px;
+  width: 90%;
+  text-align: center;
+}
+
+.completion-time-inner p {
+  font-size: 0.92rem;
+  font-weight: 500;
+  margin-bottom: 16px;
+}
+
+.completion-time-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.completion-now-btn {
+  width: 100%;
+}
+
+.completion-earlier {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+}
+
+.completion-earlier label {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.completion-time-input {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  outline: none;
+}
+
+.completion-time-input:focus {
+  border-color: var(--accent);
+}
+
+@media (max-width: 768px) {
+  .energy-checkin-toast {
+    flex-wrap: wrap;
+    justify-content: center;
+    bottom: 16px;
+  }
+  .checkin-label { white-space: normal; text-align: center; width: 100%; }
 }

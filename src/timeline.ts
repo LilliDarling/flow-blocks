@@ -134,10 +134,68 @@ function renderDoneList(): void {
 }
 
 async function markDone(idx: number): Promise<void> {
-  const title = state.blocks[idx].title || TYPE_LABELS[state.blocks[idx].type] + ' block';
-  await state.updateBlockStatus(idx, 'done');
+  const block = state.blocks[idx];
+  const title = block.title || TYPE_LABELS[block.type] + ' block';
+
+  // Show a quick "when did you finish?" prompt
+  const completedAt = await askCompletionTime();
+  await state.updateBlockStatus(idx, 'done', completedAt ?? undefined);
   await state.addDoneItem(title);
   renderTimeline();
+}
+
+/** Quick inline prompt: "Just now" or pick an earlier time.
+ *  Returns null for "just now" (lets DB default handle it),
+ *  or a Date if the user picked an earlier time. */
+function askCompletionTime(): Promise<Date | null> {
+  return new Promise((resolve) => {
+    const now = new Date();
+    const container = document.createElement('div');
+    container.className = 'completion-time-prompt';
+
+    const nowH = now.getHours().toString().padStart(2, '0');
+    const nowM = now.getMinutes().toString().padStart(2, '0');
+
+    container.innerHTML = `
+      <div class="completion-time-inner">
+        <p>When did you finish this?</p>
+        <div class="completion-time-options">
+          <button class="btn btn-primary completion-now-btn">Just now</button>
+          <div class="completion-earlier">
+            <label>Earlier at:</label>
+            <input type="time" class="completion-time-input" value="${nowH}:${nowM}">
+            <button class="btn btn-ghost completion-earlier-btn">Set</button>
+          </div>
+        </div>
+      </div>`;
+
+    document.body.appendChild(container);
+
+    const cleanup = () => container.remove();
+
+    container.querySelector('.completion-now-btn')!.addEventListener('click', () => {
+      cleanup();
+      resolve(null);
+    });
+
+    container.querySelector('.completion-earlier-btn')!.addEventListener('click', () => {
+      const timeInput = container.querySelector('.completion-time-input') as HTMLInputElement;
+      const [h, m] = timeInput.value.split(':').map(Number);
+      const earlier = new Date();
+      earlier.setHours(h, m, 0, 0);
+      if (earlier > now) earlier.setTime(now.getTime());
+      cleanup();
+      resolve(earlier);
+    });
+
+    // Clicking outside dismisses and defaults to "just now"
+    container.addEventListener('click', (e) => {
+      if (e.target === container) {
+        cleanup();
+        resolve(null);
+      }
+    });
+  });
 }
 
 async function markSkip(idx: number): Promise<void> {

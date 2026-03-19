@@ -108,7 +108,7 @@
     flex-wrap: wrap;
     gap: 8px;
   }
-  .energy-slider { flex: 1; min-width: 80px; }
+  .energy-buttons { flex: 1; justify-content: center; }
   .add-block-btn { width: 100%; text-align: center; }
 
   .energy-suggestion { font-size: 0.78rem; padding: 8px 12px; }

@@ -49,6 +49,23 @@
 
 .type-option:hover { border-color: var(--accent); }
 .type-option.selected { border-color: var(--accent); background: var(--accent-glow); }
+.type-option.suggested {
+  border-color: var(--accent);
+  box-shadow: 0 0 8px rgba(124, 111, 247, 0.3);
+  position: relative;
+}
+.type-option.suggested::after {
+  content: 'suggested';
+  position: absolute;
+  top: -8px;
+  right: 6px;
+  font-size: 0.55rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+  background: var(--surface);
+  padding: 0 4px;
+}
 
 .type-dot {
   display: inline-block;
