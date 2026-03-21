@@ -251,6 +251,13 @@ async function onUserSignedIn(userId: string): Promise<void> {
   // Register push subscription (fire-and-forget)
   subscribeToPush(userId);
 
+  // Handle energy check-in opened from push notification URL
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('action') === 'energy-checkin') {
+    showCheckinToast();
+    history.replaceState(null, '', '/');
+  }
+
   // Show sync dialog if there are calendar events to review
   if (state.calendarEvents.length > 0) {
     showCalendarSyncDialog();
@@ -264,6 +271,13 @@ document.addEventListener('visibilitychange', () => {
 
   const elapsed = Date.now() - lastEnergyLogTime;
   if (elapsed >= CHECKIN_INTERVAL_MS) {
+    showCheckinToast();
+  }
+});
+
+// Listen for energy check-in messages from service worker (notification click while app is open)
+navigator.serviceWorker?.addEventListener('message', (e) => {
+  if (e.data?.type === 'ENERGY_CHECKIN') {
     showCheckinToast();
   }
 });

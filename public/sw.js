@@ -51,7 +51,7 @@ self.addEventListener('push', (e) => {
       body: data.body || '',
       icon: data.icon || '/icons/icon.svg',
       tag: data.tag || 'reminder',
-      data: { url: data.url || '/' },
+      data: { url: data.url || '/', type: data.type || 'reminder' },
     })
   );
 });
@@ -59,11 +59,16 @@ self.addEventListener('push', (e) => {
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
   const url = e.notification.data?.url || '/';
+  const type = e.notification.data?.type || 'reminder';
 
   e.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
       for (const client of windowClients) {
         if (client.url.includes(self.location.origin) && 'focus' in client) {
+          // Tell the app what kind of notification was clicked
+          if (type === 'energy-checkin') {
+            client.postMessage({ type: 'ENERGY_CHECKIN' });
+          }
           return client.focus();
         }
       }
