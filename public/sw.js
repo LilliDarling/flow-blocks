@@ -1,14 +1,6 @@
-const CACHE_NAME = 'flowblocks-v1.1';
+const CACHE_NAME = 'flowblocks-v1.2';
 const PRECACHE = [
   '/',
-  '/css/base.css',
-  '/css/layout.css',
-  '/css/timeline.css',
-  '/css/week.css',
-  '/css/pomodoro.css',
-  '/css/modal.css',
-  '/css/tips.css',
-  '/css/auth.css',
 ];
 
 self.addEventListener('install', (e) => {
