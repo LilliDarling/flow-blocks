@@ -1,6 +1,7 @@
 import { state } from './state.js';
 import { DAYS, Reminder, ReminderTimeSuggestion, fmtTime, getTodayIndex, getTodayDate, $id } from './utils.js';
 import { confirmDelete } from './confirm-delete.js';
+import { requestNotificationPermission, subscribeToPush } from './push.js';
 
 const DEFAULT_ICON = '💊';
 
@@ -284,8 +285,24 @@ export function initReminderEvents(): void {
     }
   });
 
+  // Notification opt-in banner
+  updateNotifBanner();
+  $id('notifOptInBtn').addEventListener('click', async () => {
+    const granted = await requestNotificationPermission();
+    if (granted && state.userId) subscribeToPush(state.userId);
+    updateNotifBanner();
+  });
+  $id('notifOptInDismiss').addEventListener('click', () => {
+    $id('notifOptIn').style.display = 'none';
+    sessionStorage.setItem('notif_dismissed', '1');
+  });
+
   // Request notification permission on first interaction
-  document.addEventListener('click', requestNotificationPermission, { once: true });
+  document.addEventListener('click', async () => {
+    const granted = await requestNotificationPermission();
+    if (granted && state.userId) subscribeToPush(state.userId);
+    updateNotifBanner();
+  }, { once: true });
 
   // Reschedule reminders when app regains focus (timers die when backgrounded)
   document.addEventListener('visibilitychange', async () => {
@@ -378,8 +395,10 @@ function renderManageList(): void {
   ).join('');
 }
 
-function requestNotificationPermission(): void {
-  if ('Notification' in window && Notification.permission === 'default') {
-    Notification.requestPermission();
-  }
+function updateNotifBanner(): void {
+  const banner = $id('notifOptIn');
+  const show = 'Notification' in window
+    && Notification.permission === 'default'
+    && !sessionStorage.getItem('notif_dismissed');
+  banner.style.display = show ? 'flex' : 'none';
 }

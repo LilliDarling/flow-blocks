@@ -4,6 +4,38 @@
   margin: 0 auto;
 }
 
+/* Notification opt-in banner */
+.notif-opt-in {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.notif-opt-in span { flex: 1; }
+
+.notif-opt-in .btn-sm {
+  padding: 5px 14px;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.notif-opt-in-dismiss {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0 4px;
+  font-family: inherit;
+}
+
 .reminders-header {
   display: flex;
   justify-content: space-between;
