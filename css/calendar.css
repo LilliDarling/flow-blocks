@@ -97,6 +97,19 @@
   color: var(--text);
 }
 
+.cal-reconnect-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+
+.cal-connection--stale {
+  opacity: 0.7;
+}
+
 .cal-disconnect-btn {
   padding: 4px 10px;
   border-radius: 6px;

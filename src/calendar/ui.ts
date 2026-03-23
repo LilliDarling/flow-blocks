@@ -23,10 +23,11 @@ export function renderCalendarPanel(): void {
     connectionsEl.innerHTML = `<p class="cal-empty">No calendars connected yet.</p>`;
   } else {
     connectionsEl.innerHTML = connections.map(c => `
-      <div class="cal-connection">
+      <div class="cal-connection${c._needsReconnect ? ' cal-connection--stale' : ''}">
         <div class="cal-connection-info">
           <span class="cal-provider-badge">${c.provider}</span>
           <span class="cal-connection-name">${c.display_name}</span>
+          ${c._needsReconnect ? '<span class="cal-reconnect-badge">Reconnect needed</span>' : ''}
         </div>
         <button class="cal-disconnect-btn" data-conn-id="${c.id}">Disconnect</button>
       </div>

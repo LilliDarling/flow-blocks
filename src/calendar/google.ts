@@ -104,6 +104,7 @@ export const googleProvider: CalendarProvider = {
       }
 
       console.error('Calendar: Token refresh failed', error);
+      connection._needsReconnect = true;
       return null;
     } catch (err) {
       console.error('Calendar: Token refresh unavailable', err);

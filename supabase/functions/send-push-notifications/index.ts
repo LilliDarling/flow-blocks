@@ -1,15 +1,147 @@
 // Supabase Edge Function: Send Web Push notifications for due reminders
 // and energy check-ins. Called every minute by pg_cron via pg_net.
+//
+// Uses Web Crypto API directly (no npm web-push) for Deno compatibility.
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import webpush from 'https://esm.sh/web-push@3.6.7';
 
-webpush.setVapidDetails(
-  Deno.env.get('VAPID_SUBJECT') || 'mailto:noreply@flowblocks.app',
-  Deno.env.get('VAPID_PUBLIC_KEY')!,
-  Deno.env.get('VAPID_PRIVATE_KEY')!,
-);
+const VAPID_SUBJECT = Deno.env.get('VAPID_SUBJECT') || 'mailto:noreply@flowblocks.app';
+const VAPID_PUBLIC_KEY = Deno.env.get('VAPID_PUBLIC_KEY')!;
+const VAPID_PRIVATE_KEY = Deno.env.get('VAPID_PRIVATE_KEY')!;
+
+// ── Base64url helpers ───────────────────────────────────────────────
+
+function b64url(bytes: Uint8Array): string {
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function b64urlDecode(str: string): Uint8Array {
+  const pad = '='.repeat((4 - str.length % 4) % 4);
+  const bin = atob((str + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from(bin, c => c.charCodeAt(0));
+}
+
+// ── VAPID JWT (ES256) ───────────────────────────────────────────────
+
+async function createVapidJwt(audience: string): Promise<string> {
+  const pubBytes = b64urlDecode(VAPID_PUBLIC_KEY);
+  const jwk = {
+    kty: 'EC', crv: 'P-256',
+    x: b64url(pubBytes.slice(1, 33)),
+    y: b64url(pubBytes.slice(33, 65)),
+    d: VAPID_PRIVATE_KEY,
+  };
+  const key = await crypto.subtle.importKey(
+    'jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign'],
+  );
+
+  const header = b64url(new TextEncoder().encode(JSON.stringify({ typ: 'JWT', alg: 'ES256' })));
+  const now = Math.floor(Date.now() / 1000);
+  const payload = b64url(new TextEncoder().encode(JSON.stringify({
+    aud: audience, exp: now + 12 * 3600, sub: VAPID_SUBJECT,
+  })));
+
+  const unsigned = `${header}.${payload}`;
+  const sig = new Uint8Array(await crypto.subtle.sign(
+    { name: 'ECDSA', hash: 'SHA-256' }, key, new TextEncoder().encode(unsigned),
+  ));
+  return `${unsigned}.${b64url(sig)}`;
+}
+
+// ── Web Push Encryption (RFC 8291 / aes128gcm) ─────────────────────
+
+async function hkdf(
+  salt: Uint8Array, ikm: Uint8Array, info: Uint8Array, len: number,
+): Promise<Uint8Array> {
+  const key = await crypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']);
+  return new Uint8Array(await crypto.subtle.deriveBits(
+    { name: 'HKDF', hash: 'SHA-256', salt, info }, key, len * 8,
+  ));
+}
+
+async function encryptPayload(
+  plaintext: string, p256dhB64: string, authB64: string,
+): Promise<Uint8Array> {
+  const uaPublic = b64urlDecode(p256dhB64);
+  const authSecret = b64urlDecode(authB64);
+
+  // Ephemeral ECDH key pair
+  const ephemeral = await crypto.subtle.generateKey(
+    { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits'],
+  );
+  const ephPub = new Uint8Array(await crypto.subtle.exportKey('raw', ephemeral.publicKey));
+
+  // ECDH shared secret
+  const uaKey = await crypto.subtle.importKey(
+    'raw', uaPublic, { name: 'ECDH', namedCurve: 'P-256' }, false, [],
+  );
+  const shared = new Uint8Array(await crypto.subtle.deriveBits(
+    { name: 'ECDH', public: uaKey }, ephemeral.privateKey, 256,
+  ));
+
+  // IKM = HKDF(auth_secret, shared, "WebPush: info\0" || ua_public || eph_public, 32)
+  const infoPrefix = new TextEncoder().encode('WebPush: info\0');
+  const ikmInfo = new Uint8Array(infoPrefix.length + uaPublic.length + ephPub.length);
+  ikmInfo.set(infoPrefix);
+  ikmInfo.set(uaPublic, infoPrefix.length);
+  ikmInfo.set(ephPub, infoPrefix.length + uaPublic.length);
+  const ikm = await hkdf(authSecret, shared, ikmInfo, 32);
+
+  // Random salt for this message
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+
+  // Derive content encryption key and nonce
+  const cek = await hkdf(salt, ikm, new TextEncoder().encode('Content-Encoding: aes128gcm\0'), 16);
+  const nonce = await hkdf(salt, ikm, new TextEncoder().encode('Content-Encoding: nonce\0'), 12);
+
+  // Pad plaintext (add \x02 delimiter for last record)
+  const ptBytes = new TextEncoder().encode(plaintext);
+  const padded = new Uint8Array(ptBytes.length + 1);
+  padded.set(ptBytes);
+  padded[ptBytes.length] = 2;
+
+  // AES-128-GCM encrypt
+  const aesKey = await crypto.subtle.importKey('raw', cek, 'AES-GCM', false, ['encrypt']);
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce }, aesKey, padded));
+
+  // Build aes128gcm record: salt(16) + rs(4) + idlen(1) + keyid(65) + ciphertext
+  const headerLen = 16 + 4 + 1 + 65;
+  const record = new Uint8Array(headerLen + ct.length);
+  record.set(salt, 0);
+  new DataView(record.buffer).setUint32(16, 4096);
+  record[20] = 65;
+  record.set(ephPub, 21);
+  record.set(ct, headerLen);
+  return record;
+}
+
+// ── Send a single push notification ─────────────────────────────────
+
+async function sendPush(
+  sub: { endpoint: string; keys: { p256dh: string; auth: string } },
+  payload: string,
+): Promise<number> {
+  const audience = new URL(sub.endpoint).origin;
+  const jwt = await createVapidJwt(audience);
+  const body = await encryptPayload(payload, sub.keys.p256dh, sub.keys.auth);
+
+  const resp = await fetch(sub.endpoint, {
+    method: 'POST',
+    headers: {
+      'Authorization': `vapid t=${jwt},k=${VAPID_PUBLIC_KEY}`,
+      'Content-Encoding': 'aes128gcm',
+      'Content-Type': 'application/octet-stream',
+      'TTL': '86400',
+    },
+    body,
+  });
+  return resp.status;
+}
+
+// ── Main handler ────────────────────────────────────────────────────
 
 serve(async () => {
   const supabase = createClient(
@@ -96,19 +228,16 @@ serve(async () => {
       });
 
       try {
-        await webpush.sendNotification(
-          {
-            endpoint: sub.endpoint,
-            keys: { p256dh: sub.p256dh, auth: sub.auth },
-          },
+        const status = await sendPush(
+          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
           payload,
         );
-        sent++;
-      } catch (err: unknown) {
-        const status = (err as { statusCode?: number }).statusCode;
+        if (status >= 200 && status < 300) sent++;
         if (status === 410 || status === 404) {
           await supabase.from('push_subscriptions').delete().eq('id', sub.id);
         }
+      } catch {
+        // network error — skip
       }
     }
   }
@@ -164,19 +293,16 @@ serve(async () => {
     });
 
     try {
-      await webpush.sendNotification(
-        {
-          endpoint: sub.endpoint,
-          keys: { p256dh: sub.p256dh, auth: sub.auth },
-        },
+      const status = await sendPush(
+        { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
         payload,
       );
-      sent++;
-    } catch (err: unknown) {
-      const status = (err as { statusCode?: number }).statusCode;
+      if (status >= 200 && status < 300) sent++;
       if (status === 410 || status === 404) {
         await supabase.from('push_subscriptions').delete().eq('id', sub.id);
       }
+    } catch {
+      // network error — skip
     }
   }
 
@@ -187,7 +313,6 @@ serve(async () => {
 
 /** Get minutes since midnight in the given timezone */
 function localMinutesSinceMidnight(date: Date, timezone: string): number {
-  // Use a single toLocaleTimeString call to get "HH:MM" reliably
   const timeStr = date.toLocaleTimeString('en-GB', { timeZone: timezone, hour: '2-digit', minute: '2-digit', hour12: false });
   const [h, m] = timeStr.split(':').map(Number);
   return h * 60 + m;

@@ -50,13 +50,18 @@ WHERE EXISTS (
   SELECT 1 FROM cron.job WHERE jobname = 'send-push-notifications'
 );
 
+-- NOTE: The service_role key must be hardcoded here because
+-- current_setting('supabase.service_role_key') is not available
+-- in the pg_cron background worker context.
+-- Replace <SERVICE_ROLE_KEY> with the actual key from
+-- Supabase Dashboard > Settings > API > service_role.
 SELECT cron.schedule(
   'send-push-notifications',
   '* * * * *',
   $$
   SELECT net.http_post(
     url := 'https://yclaroxofbceouhxpeof.supabase.co/functions/v1/send-push-notifications',
-    headers := '{"Authorization": "Bearer ' || current_setting('supabase.service_role_key', true) || '", "Content-Type": "application/json"}'::jsonb,
+    headers := '{"Authorization": "Bearer <SERVICE_ROLE_KEY>", "Content-Type": "application/json"}'::jsonb,
     body := '{}'::jsonb
   );
   $$

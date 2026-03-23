@@ -23,6 +23,7 @@ export interface CalendarConnection {
   calendar_ids: string[]; // which calendars to sync
   display_name: string;
   created_at: string;
+  _needsReconnect?: boolean;
 }
 
 /** What a provider needs to implement. */
