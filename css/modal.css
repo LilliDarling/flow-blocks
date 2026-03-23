@@ -11,6 +11,8 @@
 
 .modal-overlay.open { display: flex; }
 
+#deleteConfirm { z-index: 110; }
+
 .modal {
   background: var(--surface);
   border: 1px solid var(--border);

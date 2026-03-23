@@ -138,6 +138,10 @@ async function sendPush(
     },
     body,
   });
+  if (!resp.ok) {
+    const errBody = await resp.text().catch(() => '');
+    console.error(`[push] FCM ${resp.status}: ${errBody} endpoint=${sub.endpoint.slice(-20)}`);
+  }
   return resp.status;
 }
 
@@ -171,73 +175,95 @@ serve(async () => {
   const now = new Date();
   let sent = 0;
 
-  // --- Reminder notifications ---
-
+  // Group subscriptions by user
+  const subsByUser = new Map<string, typeof subs>();
   for (const sub of subs) {
-    if (!reminders || reminders.length === 0) break;
+    const list = subsByUser.get(sub.user_id) || [];
+    list.push(sub);
+    subsByUser.set(sub.user_id, list);
+  }
 
-    const tz = sub.timezone || 'UTC';
-    const localDate = now.toLocaleDateString('en-CA', { timeZone: tz });
-    const localDow = localDayOfWeek(now, tz);
-    const nowMinutes = localMinutesSinceMidnight(now, tz);
-
-    const userReminders = reminders.filter(
-      (r: { user_id: string }) => r.user_id === sub.user_id,
-    );
-
-    for (const reminder of userReminders) {
-      if (!reminder.days.includes(localDow)) continue;
-
-      const [rh, rm] = reminder.reminder_time.slice(0, 5).split(':').map(Number);
-      const reminderMinutes = rh * 60 + rm;
-
-      const diff = reminderMinutes - nowMinutes;
-      if (diff < -5 || diff > 5) continue;
-
-      const { count: compCount } = await supabase
-        .from('reminder_completions')
-        .select('*', { count: 'exact', head: true })
-        .eq('reminder_id', reminder.id)
-        .eq('completion_date', localDate);
-
-      if (compCount && compCount > 0) continue;
-
-      const { count: skipCount } = await supabase
-        .from('reminder_skips')
-        .select('*', { count: 'exact', head: true })
-        .eq('reminder_id', reminder.id)
-        .eq('skip_date', localDate);
-
-      if (skipCount && skipCount > 0) continue;
-
-      const { error: dedupErr } = await supabase
-        .from('push_notification_log')
-        .insert({
-          reminder_id: reminder.id,
-          notification_date: localDate,
-        });
-
-      if (dedupErr) continue;
-
-      const payload = JSON.stringify({
-        title: `${reminder.icon || '💊'} ${reminder.name}`,
-        body: `Gentle reminder — it's ${formatTime(reminder.reminder_time.slice(0, 5))}`,
-        icon: '/icons/icon.svg',
-        tag: `reminder-${reminder.id}`,
-        url: '/',
-      });
-
+  // Helper: send to ALL of a user's subscriptions
+  async function sendToAll(
+    userSubs: typeof subs,
+    payload: string,
+  ): Promise<number> {
+    let count = 0;
+    for (const sub of userSubs) {
       try {
         const status = await sendPush(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
           payload,
         );
-        if (status >= 200 && status < 300) sent++;
+        if (status >= 200 && status < 300) count++;
         if (status === 410 || status === 404) {
           await supabase.from('push_subscriptions').delete().eq('id', sub.id);
         }
       } catch {
         // network error — skip
+      }
+    }
+    return count;
+  }
+
+  // --- Reminder notifications ---
+
+  if (reminders && reminders.length > 0) {
+    for (const [userId, userSubs] of subsByUser) {
+      const tz = userSubs[0].timezone || 'UTC';
+      const localDate = now.toLocaleDateString('en-CA', { timeZone: tz });
+      const localDow = localDayOfWeek(now, tz);
+      const nowMinutes = localMinutesSinceMidnight(now, tz);
+
+      const userReminders = reminders.filter(
+        (r: { user_id: string }) => r.user_id === userId,
+      );
+
+      for (const reminder of userReminders) {
+        if (!reminder.days.includes(localDow)) continue;
+
+        const [rh, rm] = reminder.reminder_time.slice(0, 5).split(':').map(Number);
+        const reminderMinutes = rh * 60 + rm;
+
+        const diff = reminderMinutes - nowMinutes;
+        if (diff < -5 || diff > 5) continue;
+
+        const { count: compCount } = await supabase
+          .from('reminder_completions')
+          .select('*', { count: 'exact', head: true })
+          .eq('reminder_id', reminder.id)
+          .eq('completion_date', localDate);
+
+        if (compCount && compCount > 0) continue;
+
+        const { count: skipCount } = await supabase
+          .from('reminder_skips')
+          .select('*', { count: 'exact', head: true })
+          .eq('reminder_id', reminder.id)
+          .eq('skip_date', localDate);
+
+        if (skipCount && skipCount > 0) continue;
+
+        // Dedup: one notification per reminder per day
+        const { error: dedupErr } = await supabase
+          .from('push_notification_log')
+          .insert({
+            reminder_id: reminder.id,
+            notification_date: localDate,
+          });
+
+        if (dedupErr) continue;
+
+        const payload = JSON.stringify({
+          title: `${reminder.icon || '💊'} ${reminder.name}`,
+          body: `Gentle reminder — it's ${formatTime(reminder.reminder_time.slice(0, 5))}`,
+          icon: '/icons/icon.svg',
+          tag: `reminder-${reminder.id}`,
+          url: '/',
+        });
+
+        // Send to ALL of this user's devices
+        sent += await sendToAll(userSubs, payload);
       }
     }
   }
@@ -248,12 +274,11 @@ serve(async () => {
 
   const ENERGY_SLOTS = [9, 11, 13, 15, 17, 19];
 
-  for (const sub of subs) {
-    const tz = sub.timezone || 'UTC';
+  for (const [userId, userSubs] of subsByUser) {
+    const tz = userSubs[0].timezone || 'UTC';
     const localDate = now.toLocaleDateString('en-CA', { timeZone: tz });
     const nowMinutes = localMinutesSinceMidnight(now, tz);
 
-    // Find which slot (if any) is due right now (within ±5 min window)
     const dueSlot = ENERGY_SLOTS.find((slotHour) => {
       const slotMinutes = slotHour * 60;
       const diff = slotMinutes - nowMinutes;
@@ -266,19 +291,19 @@ serve(async () => {
     const { error: dedupErr } = await supabase
       .from('energy_checkin_notification_log')
       .insert({
-        user_id: sub.user_id,
+        user_id: userId,
         checkin_date: localDate,
         slot_hour: dueSlot,
       });
 
-    if (dedupErr) continue; // already sent for this slot
+    if (dedupErr) continue;
 
     // Skip if user already logged energy in the last 90 minutes
     const cutoff = new Date(now.getTime() - 90 * 60 * 1000).toISOString();
     const { count: recentLogs } = await supabase
       .from('energy_logs')
       .select('*', { count: 'exact', head: true })
-      .eq('user_id', sub.user_id)
+      .eq('user_id', userId)
       .gte('logged_at', cutoff);
 
     if (recentLogs && recentLogs > 0) continue;
@@ -292,18 +317,8 @@ serve(async () => {
       type: 'energy-checkin',
     });
 
-    try {
-      const status = await sendPush(
-        { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-        payload,
-      );
-      if (status >= 200 && status < 300) sent++;
-      if (status === 410 || status === 404) {
-        await supabase.from('push_subscriptions').delete().eq('id', sub.id);
-      }
-    } catch {
-      // network error — skip
-    }
+    // Send to ALL of this user's devices
+    sent += await sendToAll(userSubs, payload);
   }
 
   return new Response(JSON.stringify({ sent }), {
