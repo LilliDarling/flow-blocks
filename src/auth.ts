@@ -36,7 +36,8 @@ function showError(msg: string): void {
   el.textContent = msg;
   el.style.display = 'block';
   el.style.color = 'var(--danger)';
-  (el as HTMLElement).style.background = 'rgba(239, 68, 68, 0.08)';
+  (el as HTMLElement).style.background = 'var(--accent-glow)';
+  (el as HTMLElement).style.borderLeft = '3px solid var(--danger)';
 }
 
 function showSuccess(msg: string): void {
@@ -44,7 +45,8 @@ function showSuccess(msg: string): void {
   el.textContent = msg;
   el.style.display = 'block';
   el.style.color = 'var(--recharge)';
-  (el as HTMLElement).style.background = 'rgba(52, 211, 153, 0.08)';
+  (el as HTMLElement).style.background = 'var(--accent-glow)';
+  (el as HTMLElement).style.borderLeft = '3px solid var(--recharge)';
 }
 
 function clearError(): void {
@@ -130,6 +132,19 @@ async function handleForgotPassword(): Promise<void> {
   }
 }
 
+async function handleGoogleSignIn(): Promise<void> {
+  clearError();
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: window.location.origin,
+    },
+  });
+  if (error) {
+    showError(error.message);
+  }
+}
+
 async function handleSignOut(): Promise<void> {
   await supabase.auth.signOut();
 }
@@ -140,6 +155,7 @@ export function initAuth(): void {
   // Wire up auth form buttons
   $id('authSignIn').addEventListener('click', handleSignIn);
   $id('authSignUp').addEventListener('click', handleSignUp);
+  $id('authGoogle').addEventListener('click', handleGoogleSignIn);
   $id('authForgot').addEventListener('click', handleForgotPassword);
   $id('signOutBtn').addEventListener('click', handleSignOut);
 

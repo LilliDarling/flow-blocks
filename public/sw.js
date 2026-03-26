@@ -1,4 +1,4 @@
-const CACHE_NAME = 'flowblocks-v1.2';
+const CACHE_NAME = 'wildbloom-v2.0';
 const PRECACHE = [
   '/',
 ];
@@ -36,12 +36,12 @@ self.addEventListener('push', (e) => {
   // Skipping when focused violates `userVisibleOnly` and causes mobile browsers
   // to throttle or revoke the push subscription.
   let data;
-  try { data = e.data.json(); } catch { data = { title: 'Flow Blocks', body: e.data.text() }; }
+  try { data = e.data.json(); } catch { data = { title: 'Wildbloom', body: e.data.text() }; }
 
   e.waitUntil(
-    self.registration.showNotification(data.title || 'Flow Blocks', {
+    self.registration.showNotification(data.title || 'Wildbloom', {
       body: data.body || '',
-      icon: data.icon || '/icons/icon.svg',
+      icon: data.icon || '/icons/icon.png',
       tag: data.tag || 'reminder',
       data: { url: data.url || '/', type: data.type || 'reminder' },
     })
@@ -60,6 +60,8 @@ self.addEventListener('notificationclick', (e) => {
           // Tell the app what kind of notification was clicked
           if (type === 'energy-checkin') {
             client.postMessage({ type: 'ENERGY_CHECKIN' });
+          } else if (type === 'pomo-complete') {
+            client.postMessage({ type: 'POMO_COMPLETE' });
           }
           return client.focus();
         }

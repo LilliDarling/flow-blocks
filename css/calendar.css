@@ -88,7 +88,7 @@
   letter-spacing: 0.05em;
   padding: 2px 8px;
   border-radius: 10px;
-  background: rgba(124, 111, 247, 0.15);
+  background: rgba(30, 128, 64, 0.12);
   color: var(--accent);
 }
 
@@ -102,8 +102,13 @@
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 10px;
-  background: rgba(245, 158, 11, 0.15);
-  color: #f59e0b;
+  background: rgba(212, 165, 116, 0.12);
+  color: #d4a574;
+}
+
+.light .cal-reconnect-badge {
+  background: rgba(196, 136, 74, 0.12);
+  color: #c4884a;
 }
 
 .cal-connection--stale {
@@ -123,7 +128,7 @@
 }
 
 .cal-disconnect-btn:hover {
-  background: rgba(239, 68, 68, 0.1);
+  background: rgba(184, 68, 68, 0.1);
 }
 
 .cal-add-providers {
@@ -172,24 +177,24 @@
   width: 4px;
 }
 
-/* Rotating color palette for calendar events */
-.block-card.calendar-event.cal-color-0::before { background: #6366f1; }
-.block-card.calendar-event.cal-color-1::before { background: #38bdf8; }
-.block-card.calendar-event.cal-color-2::before { background: #f59e0b; }
-.block-card.calendar-event.cal-color-3::before { background: #34d399; }
-.block-card.calendar-event.cal-color-4::before { background: #ec4899; }
-.block-card.calendar-event.cal-color-5::before { background: #a78bfa; }
-.block-card.calendar-event.cal-color-6::before { background: #f97316; }
-.block-card.calendar-event.cal-color-7::before { background: #14b8a6; }
+/* Rotating color palette for calendar events — earthy garden tones */
+.block-card.calendar-event.cal-color-0::before { background: #2d6a4f; }
+.block-card.calendar-event.cal-color-1::before { background: #5b9ea6; }
+.block-card.calendar-event.cal-color-2::before { background: #c4884a; }
+.block-card.calendar-event.cal-color-3::before { background: #8b6cc1; }
+.block-card.calendar-event.cal-color-4::before { background: #c27a8e; }
+.block-card.calendar-event.cal-color-5::before { background: #7a8866; }
+.block-card.calendar-event.cal-color-6::before { background: #b87a3d; }
+.block-card.calendar-event.cal-color-7::before { background: #4a8f7a; }
 
-.block-card.calendar-event.cal-color-0 .block-type-badge { color: #6366f1; }
-.block-card.calendar-event.cal-color-1 .block-type-badge { color: #38bdf8; }
-.block-card.calendar-event.cal-color-2 .block-type-badge { color: #f59e0b; }
-.block-card.calendar-event.cal-color-3 .block-type-badge { color: #34d399; }
-.block-card.calendar-event.cal-color-4 .block-type-badge { color: #ec4899; }
-.block-card.calendar-event.cal-color-5 .block-type-badge { color: #a78bfa; }
-.block-card.calendar-event.cal-color-6 .block-type-badge { color: #f97316; }
-.block-card.calendar-event.cal-color-7 .block-type-badge { color: #14b8a6; }
+.block-card.calendar-event.cal-color-0 .block-type-badge { color: #2d6a4f; }
+.block-card.calendar-event.cal-color-1 .block-type-badge { color: #5b9ea6; }
+.block-card.calendar-event.cal-color-2 .block-type-badge { color: #c4884a; }
+.block-card.calendar-event.cal-color-3 .block-type-badge { color: #8b6cc1; }
+.block-card.calendar-event.cal-color-4 .block-type-badge { color: #c27a8e; }
+.block-card.calendar-event.cal-color-5 .block-type-badge { color: #7a8866; }
+.block-card.calendar-event.cal-color-6 .block-type-badge { color: #b87a3d; }
+.block-card.calendar-event.cal-color-7 .block-type-badge { color: #4a8f7a; }
 
 .block-card.calendar-event .block-actions {
   display: none !important;
@@ -277,10 +282,16 @@
   font-size: 0.78rem;
   padding: 8px 10px;
   border-radius: 6px;
-  background: rgba(245, 158, 11, 0.1);
-  border: 1px solid rgba(245, 158, 11, 0.25);
-  color: #f59e0b;
+  background: rgba(212, 165, 116, 0.1);
+  border: 1px solid rgba(212, 165, 116, 0.25);
+  color: #d4a574;
   margin-top: 6px;
+}
+
+.light .cal-sync-conflict {
+  background: rgba(196, 136, 74, 0.1);
+  border-color: rgba(196, 136, 74, 0.25);
+  color: #c4884a;
 }
 
 .cal-sync-conflict strong {
@@ -290,9 +301,13 @@
 /* Adjusted block note in timeline */
 .block-adjusted-note {
   font-size: 0.7rem;
-  color: #f59e0b;
+  color: #d4a574;
   margin-top: 4px;
   font-style: italic;
+}
+
+.light .block-adjusted-note {
+  color: #c4884a;
 }
 
 @media (max-width: 768px) {

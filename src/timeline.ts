@@ -140,7 +140,7 @@ async function markDone(idx: number): Promise<void> {
   // Show a quick "when did you finish?" prompt
   const completedAt = await askCompletionTime();
   await state.updateBlockStatus(idx, 'done', completedAt ?? undefined);
-  await state.addDoneItem(title);
+  await state.addDoneItem(title, completedAt ?? undefined);
   renderTimeline();
 }
 

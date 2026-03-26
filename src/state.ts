@@ -3,7 +3,7 @@ import {
   FlowBlock, DoneItem, PomoMode, PomoSettings, PomoSession, PomoSessionRow,
   BlockStatus, CompletionRow, EnergyLogRow,
   Reminder, ReminderRow, ReminderCompletionRow, ReminderTimeSuggestion, reminderFromRow,
-  blockFromRow, doneItemFromRow, getTodayDate,
+  blockFromRow, doneItemFromRow, getTodayDate, getDateForDayIndex,
 } from './utils.js';
 import {
   CalendarEvent, CalendarConnection,
@@ -42,6 +42,7 @@ class AppState {
   energyLogs: EnergyLogRow[] = [];
   calendarConnections: CalendarConnection[] = [];
   calendarEvents: CalendarEvent[] = [];
+  weekCalendarEvents: Map<string, CalendarEvent[]> = new Map(); // "YYYY-MM-DD" -> events
   pomoSessions: PomoSession[] = [];
   reminders: Reminder[] = [];
   reminderCompletions: Set<string> = new Set(); // reminder IDs completed today
@@ -142,6 +143,61 @@ class AppState {
 
     // Fetch reminders + today's completions
     await this.loadReminders();
+  }
+
+  /** Lightweight re-sync of volatile data when the app regains focus.
+   *  Skips heavy one-time setup (calendar OAuth, pomo settings). */
+  async refresh(): Promise<void> {
+    if (!this.userId) return;
+    const today = getTodayDate();
+
+    // Re-fetch blocks
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 7);
+    const cutoffDate = cutoff.toISOString().slice(0, 10);
+    const { data: blockRows } = await supabase
+      .from('blocks')
+      .select('*')
+      .eq('user_id', this.userId)
+      .or(`block_date.is.null,block_date.gte.${cutoffDate}`)
+      .order('start_time');
+    this.blocks = (blockRows || []).map(blockFromRow);
+
+    // Re-fetch completions
+    const recurringIds = this.blocks.filter(b => !b.date && b.id).map(b => b.id!);
+    if (recurringIds.length > 0) {
+      const { data: compRows } = await supabase
+        .from('block_completions')
+        .select('*')
+        .in('block_id', recurringIds)
+        .eq('completion_date', today);
+      this.completions.clear();
+      for (const row of (compRows || []) as CompletionRow[]) {
+        this.completions.set(`${row.block_id}_${row.completion_date}`, row.status as BlockStatus);
+      }
+    }
+
+    // Re-fetch energy
+    await this.loadEnergyLogs();
+    if (this.energyLogs.length > 0) {
+      this.energy = this.energyLogs[this.energyLogs.length - 1].value;
+    }
+
+    // Re-fetch done items
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const { data: doneRows } = await supabase
+      .from('done_items')
+      .select('*')
+      .eq('user_id', this.userId)
+      .gte('created_at', todayStart.toISOString());
+    this.doneItems = (doneRows || []).map(doneItemFromRow);
+
+    // Re-fetch reminders + completions/skips
+    await this.loadReminders();
+
+    // Re-fetch pomo sessions
+    await this.loadPomoSessions();
   }
 
   // --- Block CRUD ---
@@ -249,7 +305,22 @@ class AppState {
       const today = getTodayDate();
       this.calendarEvents = await fetchAllEvents(this.calendarConnections, today);
       await this.reconcileBuffers();
+      // Fetch events for the full week (for week view)
+      this.loadWeekCalendar();
     }
+  }
+
+  /** Fetch calendar events for every day of the current week. */
+  async loadWeekCalendar(): Promise<void> {
+    if (this.calendarConnections.length === 0) return;
+    this.weekCalendarEvents.clear();
+    const fetches = Array.from({ length: 7 }, (_, i) => {
+      const date = getDateForDayIndex(i);
+      return fetchAllEvents(this.calendarConnections, date).then(events => {
+        this.weekCalendarEvents.set(date, events);
+      });
+    });
+    await Promise.all(fetches);
   }
 
   /** Reconcile linked buffer blocks against current calendar events.
@@ -319,6 +390,18 @@ class AppState {
     if (data) this.energyLogs.push(data as EnergyLogRow);
   }
 
+  /** Fetch the most recent energy log to sync across tabs/devices. */
+  async fetchLatestEnergyLog(): Promise<EnergyLogRow | null> {
+    const { data } = await supabase
+      .from('energy_logs')
+      .select('*')
+      .eq('user_id', this.userId)
+      .order('logged_at', { ascending: false })
+      .limit(1)
+      .single();
+    return (data as EnergyLogRow) || null;
+  }
+
   async loadEnergyLogs(days: number = 14): Promise<void> {
     const since = new Date();
     since.setDate(since.getDate() - days);
@@ -333,8 +416,8 @@ class AppState {
 
   // --- Done items ---
 
-  async addDoneItem(text: string): Promise<void> {
-    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  async addDoneItem(text: string, completedAt?: Date): Promise<void> {
+    const time = (completedAt ?? new Date()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const { data } = await supabase
       .from('done_items')
       .insert({ user_id: this.userId, text, time })

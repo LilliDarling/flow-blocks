@@ -1,32 +1,55 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
-  --bg: #0f0f13;
-  --surface: #1a1a24;
-  --surface2: #22222f;
-  --surface3: #2a2a3a;
-  --border: #333346;
-  --text: #e8e8f0;
-  --text-dim: #9090a8;
-  --accent: #7c6ff7;
-  --accent-glow: rgba(124, 111, 247, 0.15);
-  --deep: #6366f1;
-  --light: #38bdf8;
-  --admin: #f59e0b;
-  --recharge: #34d399;
-  --flex: #a78bfa;
-  --danger: #ef4444;
+  /* Dark mode — matches blog dark: neutral surfaces + sage accents */
+  --bg: #2a2a2a;              /* surface-dark-alt */
+  --surface: #393A39;         /* surface-dark */
+  --surface2: #343b2f;        /* sage-900 */
+  --surface3: #3d4536;        /* sage-800 */
+  --border: #4a5440;          /* sage-700 */
+  --text: #e8ebe3;            /* sage-100 */
+  --text-dim: #95a17f;        /* sage-400 */
+  --accent: #1e8040;          /* brand-light */
+  --accent-glow: rgba(30, 128, 64, 0.15);
+  --deep: #5b9ea6;
+  --light: #7abfc9;
+  --admin: #d4a574;
+  --recharge: #a78bda;
+  --flex: #d49aab;
+  --danger: #d46a6a;
   --radius: 12px;
 }
 
+.light {
+  /* Light mode — matches blog light: cream/white + sage borders */
+  --bg: #f5f5f0;              /* surface-light-alt */
+  --surface: #F7FAF7;         /* surface-light */
+  --surface2: #e8ebe3;        /* sage-100 */
+  --surface3: #d1d7c7;        /* sage-200 */
+  --border: #b3bda3;          /* sage-300 */
+  --text: #1a1a1a;            /* blog body text */
+  --text-dim: #5f6b4f;        /* sage-600 */
+  --accent: #186733;          /* brand */
+  --accent-glow: rgba(24, 103, 51, 0.12);
+  --deep: #2d6a4f;
+  --light: #5b9ea6;
+  --admin: #c4884a;
+  --recharge: #8b6cc1;
+  --flex: #c27a8e;
+  --danger: #b84444;
+}
+
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'Inter', system-ui, sans-serif;
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
   padding: 20px;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+h1, h2, h3, h4 {
+  font-family: 'Playfair Display', Georgia, serif;
 }
 
 .btn {
@@ -56,7 +79,7 @@ body {
   border-color: var(--danger);
 }
 
-.btn-danger:hover { background: rgba(239, 68, 68, 0.1); }
+.btn-danger:hover { background: rgba(184, 68, 68, 0.1); }
 
 .form-group {
   margin-bottom: 16px;

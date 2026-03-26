@@ -103,7 +103,7 @@ function showReminderNotification(reminder: Reminder): void {
 
   const n = new Notification(`${reminder.icon || '💊'} ${reminder.name}`, {
     body: `Gentle reminder — it's ${fmtTime(reminder.time)}`,
-    icon: '/icons/icon.svg',
+    icon: '/icons/icon.png',
     tag: `reminder-${reminder.id}`,
   });
   setTimeout(() => n.close(), 15000);

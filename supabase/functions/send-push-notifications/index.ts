@@ -6,7 +6,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const VAPID_SUBJECT = Deno.env.get('VAPID_SUBJECT') || 'mailto:noreply@flowblocks.app';
+const VAPID_SUBJECT = Deno.env.get('VAPID_SUBJECT') || 'mailto:noreply@wildbloom.app';
 const VAPID_PUBLIC_KEY = Deno.env.get('VAPID_PUBLIC_KEY')!;
 const VAPID_PRIVATE_KEY = Deno.env.get('VAPID_PRIVATE_KEY')!;
 
@@ -257,7 +257,7 @@ serve(async () => {
         const payload = JSON.stringify({
           title: `${reminder.icon || '💊'} ${reminder.name}`,
           body: `Gentle reminder — it's ${formatTime(reminder.reminder_time.slice(0, 5))}`,
-          icon: '/icons/icon.svg',
+          icon: '/icons/icon.png',
           tag: `reminder-${reminder.id}`,
           url: '/',
         });
@@ -311,7 +311,7 @@ serve(async () => {
     const payload = JSON.stringify({
       title: '\u26A1 Energy Check-in',
       body: 'Quick check \u2014 how is your energy right now?',
-      icon: '/icons/icon.svg',
+      icon: '/icons/icon.png',
       tag: 'energy-checkin',
       url: '/?action=energy-checkin',
       type: 'energy-checkin',

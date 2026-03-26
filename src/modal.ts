@@ -58,7 +58,7 @@ export function openModal(index = -1): void {
   suggestedType = null;
 
   $id('deleteBtn').style.display = index >= 0 ? 'block' : 'none';
-  $id('modalTitle').textContent = index >= 0 ? 'Edit Block' : 'Add Flow Block';
+  $id('modalTitle').textContent = index >= 0 ? 'Edit Block' : 'Add Block';
 
   const titleInput = $id('blockTitle') as HTMLInputElement;
   const menuInput = $id('blockMenu') as HTMLTextAreaElement;
@@ -111,7 +111,7 @@ export function openModalForSlot(dayIdx: number, hour: string): void {
   state.selectedDays = [dayIdx];
 
   $id('deleteBtn').style.display = 'none';
-  $id('modalTitle').textContent = 'Add Flow Block';
+  $id('modalTitle').textContent = 'Add Block';
   ($id('blockTitle') as HTMLInputElement).value = '';
   ($id('blockMenu') as HTMLTextAreaElement).value = '';
   populateTimeOptions();

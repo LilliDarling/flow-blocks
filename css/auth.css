@@ -18,9 +18,7 @@
   font-size: 1.3rem;
   font-weight: 700;
   margin-bottom: 6px;
-  background: linear-gradient(135deg, #7c6ff7, #38bdf8);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--accent);
 }
 
 .auth-card .auth-subtitle {
@@ -39,7 +37,7 @@
   color: var(--danger);
   margin-bottom: 12px;
   padding: 8px 12px;
-  background: rgba(239, 68, 68, 0.08);
+  background: rgba(184, 68, 68, 0.08);
   border-radius: 8px;
 }
 
@@ -99,6 +97,52 @@
 .auth-buttons .btn {
   flex: 1;
   text-align: center;
+}
+
+/* Divider */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* Google sign-in button */
+.auth-google-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px 18px;
+  background: var(--surface2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.auth-google-btn:hover {
+  border-color: var(--accent);
+  background: var(--surface3);
+}
+
+.auth-google-btn svg {
+  flex-shrink: 0;
 }
 
 .sign-out-btn {

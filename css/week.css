@@ -61,6 +61,16 @@
 
 .week-cell.filled { background: var(--surface2); }
 
+/* Calendar event colors in week grid */
+.week-cell.calendar-event.cal-color-0::before { background: #2d6a4f; }
+.week-cell.calendar-event.cal-color-1::before { background: #5b9ea6; }
+.week-cell.calendar-event.cal-color-2::before { background: #c4884a; }
+.week-cell.calendar-event.cal-color-3::before { background: #8b6cc1; }
+.week-cell.calendar-event.cal-color-4::before { background: #c27a8e; }
+.week-cell.calendar-event.cal-color-5::before { background: #7a8866; }
+.week-cell.calendar-event.cal-color-6::before { background: #b87a3d; }
+.week-cell.calendar-event.cal-color-7::before { background: #4a8f7a; }
+
 .week-cell-label {
   font-weight: 500;
   font-size: 0.7rem;

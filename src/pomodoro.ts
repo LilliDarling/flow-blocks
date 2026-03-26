@@ -102,13 +102,27 @@ async function requestNotificationPermission(): Promise<void> {
 
 function sendNotification(title: string, body: string): void {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
+
+  // Prefer service worker notification — works when app is backgrounded / screen off
+  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+    navigator.serviceWorker.ready.then(reg => {
+      reg.showNotification(title, {
+        body,
+        icon: '/icons/icon.png',
+        tag: 'pomo-complete',
+        data: { url: '/', type: 'pomo-complete' },
+      });
+    }).catch(() => { /* fall through to local notification */ });
+    return;
+  }
+
+  // Fallback: local notification (foreground only)
   try {
     const n = new Notification(title, {
       body,
-      icon: '/icons/icon.svg',
+      icon: '/icons/icon.png',
       tag: 'pomo-complete',
     });
-    // Auto-close after 10s
     setTimeout(() => n.close(), 10000);
   } catch { /* ignore */ }
 }
@@ -203,7 +217,7 @@ function render(): void {
   // Page title
   document.title = pomo.running
     ? `${timeStr} — ${getLabel()}`
-    : 'Flow Blocks — ADHD-Friendly Time Blocker';
+    : 'Wildbloom — Energy-first days for curious minds';
 }
 
 function playSound(): void {

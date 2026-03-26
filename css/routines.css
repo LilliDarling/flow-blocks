@@ -74,7 +74,7 @@
   transition: all 0.2s;
 }
 
-.add-reminder-btn:hover { background: rgba(52, 211, 153, 0.1); }
+.add-reminder-btn:hover { background: rgba(139, 108, 193, 0.1); }
 
 /* Progress bar */
 .reminder-progress {
@@ -151,12 +151,12 @@
 
 .reminder-done .reminder-check {
   border-color: var(--recharge);
-  background: rgba(52, 211, 153, 0.15);
+  background: rgba(139, 108, 193, 0.15);
 }
 
 .reminder-check:hover {
   border-color: var(--recharge);
-  background: rgba(52, 211, 153, 0.1);
+  background: rgba(139, 108, 193, 0.1);
 }
 
 .reminder-icon {

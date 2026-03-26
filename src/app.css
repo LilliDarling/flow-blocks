@@ -1,0 +1,50 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;600;700&family=Princess+Sofia&display=swap');
+
+@import 'tailwindcss';
+@plugin '@tailwindcss/forms';
+
+@theme {
+  /* Brand green — matches Growing Me */
+  --color-brand: #186733;
+  --color-brand-light: #1e8040;
+  --color-brand-dark: #124d26;
+
+  /* Sage green palette */
+  --color-sage-50: #f6f7f4;
+  --color-sage-100: #e8ebe3;
+  --color-sage-200: #d1d7c7;
+  --color-sage-300: #b3bda3;
+  --color-sage-400: #95a17f;
+  --color-sage-500: #7a8866;
+  --color-sage-600: #5f6b4f;
+  --color-sage-700: #4a5440;
+  --color-sage-800: #3d4536;
+  --color-sage-900: #343b2f;
+  --color-sage-950: #1a1f17;
+
+  /* Surface colors */
+  --color-surface-light: #F7FAF7;
+  --color-surface-light-alt: #f5f5f0;
+  --color-surface-dark: #393A39;
+  --color-surface-dark-alt: #2a2a2a;
+
+  /* Fonts — shared with Growing Me */
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-serif: 'Playfair Display', Georgia, serif;
+  --font-heading: 'Playfair Display', Georgia, serif;
+  --font-accent: 'Princess Sofia', cursive;
+}
+
+/* Import all existing component stylesheets */
+@import '../css/base.css';
+@import '../css/layout.css';
+@import '../css/timeline.css';
+@import '../css/week.css';
+@import '../css/pomodoro.css';
+@import '../css/modal.css';
+@import '../css/energy.css';
+@import '../css/calendar.css';
+@import '../css/tips.css';
+@import '../css/auth.css';
+@import '../css/routines.css';
+@import '../css/pwa.css';

@@ -1,6 +1,7 @@
 import { state } from './state.js';
 import { DAYS, TYPE_LABELS, getTodayIndex, getTodayDate, getDateForDayIndex, FlowBlock, $id } from './utils.js';
 import { openModal, openModalForSlot } from './modal.js';
+import type { CalendarEvent } from './calendar/types.js';
 
 function blockVisibleOnDay(b: FlowBlock, dayIdx: number): boolean {
   if (b.date) {
@@ -39,6 +40,9 @@ export function renderWeek(): void {
     html += `<div class="week-time-label">${h12}${ampm}</div>`;
 
     DAYS.forEach((_, dayIdx) => {
+      const date = getDateForDayIndex(dayIdx);
+
+      // Check for a flow block at this hour
       const block = state.blocks.find(b => {
         if (!blockVisibleOnDay(b, dayIdx)) return false;
         const [bh] = b.start.split(':').map(Number);
@@ -46,10 +50,24 @@ export function renderWeek(): void {
         return h >= bh && h < endH;
       });
 
+      // Check for a calendar event at this hour
+      const dayEvents = state.weekCalendarEvents.get(date) || [];
+      const calEvent = !block ? dayEvents.find(e => {
+        if (e.allDay) return false;
+        const [eh] = e.start.split(':').map(Number);
+        const endH = eh + e.duration / 60;
+        return h >= eh && h < endH;
+      }) : undefined;
+
       if (block) {
         const ridx = state.blocks.indexOf(block);
         html += `<div class="week-cell filled type-${block.type}" data-block-index="${ridx}">
           <div class="week-cell-label">${block.title || TYPE_LABELS[block.type]}</div>
+        </div>`;
+      } else if (calEvent) {
+        const colorIdx = dayEvents.indexOf(calEvent) % 8;
+        html += `<div class="week-cell filled calendar-event cal-color-${colorIdx}">
+          <div class="week-cell-label">${calEvent.title}</div>
         </div>`;
       } else {
         html += `<div class="week-cell" data-day="${dayIdx}" data-hour="${hour}"></div>`;

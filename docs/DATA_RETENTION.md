@@ -1,6 +1,6 @@
 # Data Retention & Database Management
 
-Flow Blocks uses Supabase (PostgreSQL) for persistent storage. This document covers the database schema, security model, data retention policies, and deployment steps.
+Wildbloom uses Supabase (PostgreSQL) for persistent storage. This document covers the database schema, security model, data retention policies, and deployment steps.
 
 ---
 

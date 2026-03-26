@@ -1,14 +1,14 @@
 {
-  "name": "Flow Blocks",
-  "short_name": "FlowBlocks",
-  "description": "ADHD-Friendly Time Blocker",
+  "name": "Wildbloom",
+  "short_name": "Wildbloom",
+  "description": "Energy-first days for curious minds",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0f0f13",
-  "theme_color": "#7c6ff7",
+  "background_color": "#1a1f17",
+  "theme_color": "#1e8040",
   "gcm_sender_id": "103953800507",
   "icons": [
-    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml" },
-    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+    { "src": "/icons/icon.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/icon.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

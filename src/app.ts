@@ -1,3 +1,4 @@
+import './app.css';
 import { state } from './state.js';
 import {
   $id, EnergyTier, ENERGY_TIER_VALUE, ENERGY_FIT,
@@ -196,6 +197,12 @@ function initUI(): void {
   // Add block button
   $id('addBlockBtn').addEventListener('click', () => openModal());
 
+  // Theme toggle
+  $id('themeToggleBtn').addEventListener('click', () => {
+    const isLight = document.documentElement.classList.toggle('light');
+    localStorage.setItem('theme', isLight ? 'light' : 'dark');
+  });
+
   // Event listeners for feature modules
   initTimelineEvents();
   initDragAndDrop();
@@ -264,21 +271,42 @@ async function onUserSignedIn(userId: string): Promise<void> {
   }
 }
 
-// Reschedule check-in timer when app regains focus
-document.addEventListener('visibilitychange', () => {
+// Re-sync all state when app regains focus (handles cross-tab / cross-device)
+document.addEventListener('visibilitychange', async () => {
   if (document.visibilityState !== 'visible') return;
-  if (!lastEnergyLogTime) return;
+  if (!state.userId) return;
+
+  await state.refresh();
+
+  // Sync energy UI + check-in timer from refreshed data
+  const tier = valueToTier(state.energy);
+  setEnergyTier(tier, false);
+
+  if (state.energyLogs.length > 0) {
+    const lastLog = state.energyLogs[state.energyLogs.length - 1];
+    lastEnergyLogTime = new Date(lastLog.logged_at).getTime();
+  }
 
   const elapsed = Date.now() - lastEnergyLogTime;
   if (elapsed >= CHECKIN_INTERVAL_MS) {
     showCheckinToast();
+  } else {
+    hideCheckinToast();
+    if (checkinTimer) clearTimeout(checkinTimer);
+    checkinTimer = setTimeout(() => showCheckinToast(), CHECKIN_INTERVAL_MS - elapsed);
   }
+
+  // Re-render the active view
+  renderTimeline();
+  renderReminders();
 });
 
-// Listen for energy check-in messages from service worker (notification click while app is open)
+// Listen for messages from service worker (notification clicks while app is open)
 navigator.serviceWorker?.addEventListener('message', (e) => {
   if (e.data?.type === 'ENERGY_CHECKIN') {
     showCheckinToast();
+  } else if (e.data?.type === 'POMO_COMPLETE') {
+    switchTab('pomo');
   }
 });
 

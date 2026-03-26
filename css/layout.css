@@ -6,9 +6,7 @@
 .app-header h1 {
   font-size: 1.8rem;
   font-weight: 700;
-  background: linear-gradient(135deg, #7c6ff7, #38bdf8);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--accent);
   margin-bottom: 6px;
 }
 
@@ -48,6 +46,10 @@
   color: var(--text);
 }
 
+/* Theme toggle */
+#themeToggleBtn::before { content: '\2600'; }
+.light #themeToggleBtn::before { content: '\263E'; }
+
 .view { display: none; }
 .view.active { display: block; }
 
@@ -62,7 +64,7 @@
   border-radius: 20px;
   font-size: 0.85rem;
   font-weight: 500;
-  box-shadow: 0 4px 20px rgba(124, 111, 247, 0.4);
+  box-shadow: 0 4px 20px rgba(30, 128, 64, 0.3);
   transition: transform 0.3s;
   z-index: 50;
 }
@@ -93,9 +95,9 @@
     flex-shrink: 0;
   }
 
-  .timeline { padding-left: 55px; }
-  .timeline::before { left: 42px; }
-  .time-block .time-label { left: -55px; width: 42px; font-size: 0.68rem; }
+  .timeline { padding-left: 62px; }
+  .timeline::before { left: 49px; }
+  .time-block .time-label { left: -62px; width: 42px; font-size: 0.68rem; }
   .time-block .dot { left: -17px; }
 
   .block-card { padding: 12px 14px; margin-left: 6px; }

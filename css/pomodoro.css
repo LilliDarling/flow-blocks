@@ -38,7 +38,7 @@
   transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.4s;
   transform: rotate(-90deg);
   transform-origin: center;
-  filter: drop-shadow(0 0 6px rgba(124, 111, 247, 0.3));
+  filter: drop-shadow(0 0 6px rgba(30, 128, 64, 0.3));
 }
 
 /* Ambient glow when running */
@@ -52,17 +52,17 @@
 
 @keyframes pomo-breathe {
   0%, 100% { filter: drop-shadow(0 0 0px transparent); }
-  50% { filter: drop-shadow(0 0 20px rgba(124, 111, 247, 0.15)); }
+  50% { filter: drop-shadow(0 0 20px rgba(30, 128, 64, 0.15)); }
 }
 
 @keyframes pomo-breathe-break {
   0%, 100% { filter: drop-shadow(0 0 0px transparent); }
-  50% { filter: drop-shadow(0 0 20px rgba(52, 211, 153, 0.12)); }
+  50% { filter: drop-shadow(0 0 20px rgba(139, 108, 193, 0.12)); }
 }
 
 /* Completion flash — a clean ring glow */
 .pomo-ring-container.pomo-complete-flash .pomo-progress {
-  filter: drop-shadow(0 0 18px rgba(124, 111, 247, 0.6));
+  filter: drop-shadow(0 0 18px rgba(30, 128, 64, 0.6));
   transition: filter 0.15s;
 }
 
@@ -212,11 +212,11 @@
   background: var(--accent);
   color: white;
   font-size: 1.3rem;
-  box-shadow: 0 4px 16px rgba(124, 111, 247, 0.3);
+  box-shadow: 0 4px 16px rgba(30, 128, 64, 0.3);
 }
 
 .pomo-btn.primary:hover {
-  box-shadow: 0 4px 24px rgba(124, 111, 247, 0.45);
+  box-shadow: 0 4px 24px rgba(30, 128, 64, 0.45);
   transform: scale(1.04);
 }
 
@@ -249,8 +249,13 @@
 }
 
 .pomo-distraction-btn.pomo-distraction-flash {
-  border-color: rgba(245, 158, 11, 0.5);
-  color: #f59e0b;
+  border-color: rgba(212, 165, 116, 0.5);
+  color: #d4a574;
+}
+
+.light .pomo-distraction-btn.pomo-distraction-flash {
+  border-color: rgba(196, 136, 74, 0.5);
+  color: #c4884a;
   opacity: 1;
 }
 
