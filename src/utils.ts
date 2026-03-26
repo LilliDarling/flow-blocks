@@ -1,12 +1,24 @@
 export const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
 
 export const TYPE_LABELS: Record<BlockType, string> = {
-  deep: 'Deep Focus',
-  light: 'Light Tasks',
-  admin: 'Admin',
-  recharge: 'Recharge',
-  flex: 'Flex',
+  push: 'Push',
+  flow: 'Flow',
+  steady: 'Steady',
+  growth: 'Growth',
+  drift: 'Drift',
+  rest: 'Rest',
   buffer: 'Buffer',
+};
+
+/** Brief descriptions shown in the block type picker. */
+export const TYPE_DESCRIPTIONS: Record<BlockType, string> = {
+  push: 'Takes real effort to start or sustain',
+  flow: 'You get absorbed — time disappears',
+  steady: 'Engaged but sustainable, you can keep going',
+  growth: 'Investing in yourself — learning, reflecting',
+  drift: 'Autopilot-friendly, needs doing but not much from you',
+  rest: 'Actively restores you — not just "not working"',
+  buffer: 'Transition time between blocks',
 };
 
 export type EnergyTier = 'low' | 'med' | 'high';
@@ -23,47 +35,53 @@ export function valueToTier(v: number): EnergyTier {
 
 /** Energy ranges where each block type is a good fit: [min, max] inclusive (1-10 scale). */
 export const ENERGY_FIT: Record<BlockType, [number, number]> = {
-  deep:     [7, 10],
-  light:    [4, 7],
-  admin:    [2, 5],
-  recharge: [1, 4],
-  flex:     [1, 10],
-  buffer:   [1, 10],
+  push:    [7, 10],
+  flow:    [5, 9],
+  steady:  [4, 7],
+  growth:  [3, 7],
+  drift:   [1, 5],
+  rest:    [1, 4],
+  buffer:  [1, 10],
 };
 
 /** Suggestion messages keyed by energy tier. */
 export function energySuggestion(energy: number): string {
-  if (energy <= 3) return 'Low battery — lean into recharge or admin blocks. No shame in a slow start.';
-  if (energy <= 6) return 'Moderate energy — light tasks and admin are your sweet spot right now.';
-  return 'High energy — great time for deep focus. Ride the wave!';
+  if (energy <= 3) return 'Low energy — rest or drift blocks are your friend right now. Be gentle.';
+  if (energy <= 6) return 'Moderate energy — steady, growth, or flow blocks are your sweet spot.';
+  return 'High energy — great time to push. Ride the wave!';
 }
 
-/** Keyword map for auto-suggesting block types from task titles. */
 /** Suggested menu items per block type — things that match the energy demand of each type. */
 export const BLOCK_MENU_SUGGESTIONS: Record<BlockType, string[]> = {
-  deep: [
-    'Write report or proposal', 'Deep research', 'Coding / programming',
-    'Study session', 'Strategic planning', 'Creative writing',
-    'Design work', 'Data analysis', 'Build or prototype',
+  push: [
+    'Hard workout or gym', 'Deep research', 'Difficult conversation',
+    'Strategic planning', 'Big creative project', 'Tackle dreaded task',
+    'Intense studying', 'Build or prototype', 'Deep cleaning',
   ],
-  light: [
-    'Review documents', 'Brainstorm ideas', 'Read articles',
-    'Outline next steps', 'Light editing', 'Team check-in',
-    'Sketch or wireframe', 'Catch up on Slack/messages', 'Watch training video',
+  flow: [
+    'Creative writing', 'Crafting or drawing', 'Coding when it clicks',
+    'Gardening', 'Playing music', 'Design work',
+    'Cooking something new', 'Building something', 'Photography',
   ],
-  admin: [
-    'Process emails', 'Pay bills / invoices', 'Schedule appointments',
-    'File paperwork', 'Grocery list', 'Update spreadsheets',
-    'Tidy desk / workspace', 'Sort notifications', 'Return calls',
+  steady: [
+    'Meetings', 'Review documents', 'Team check-ins',
+    'Meal prep', 'Light editing', 'Errands',
+    'Catch up on messages', 'Moderate exercise', 'House projects',
   ],
-  recharge: [
-    'Go for a walk', 'Stretch or yoga', 'Workout / gym',
-    'Meditate', 'Cook or bake', 'Craft or draw',
-    'Play music', 'Garden', 'Take a power nap',
+  growth: [
+    'Journaling', 'Therapy or coaching', 'Read a book',
+    'Online course or learning', 'Meditation practice', 'Self-reflection',
+    'Skill building', 'Listen to a podcast', 'Plan your goals',
   ],
-  flex: [
-    'Whatever feels right', 'Catch up on anything', 'Tackle the smallest task',
-    'Side project', 'Learn something new', 'Organize digital files',
+  drift: [
+    'Process emails', 'Sort notifications', 'Fold laundry',
+    'Grocery list', 'Water plants', 'Tidy up',
+    'File paperwork', 'Update a spreadsheet', 'Scroll-free phone cleanup',
+  ],
+  rest: [
+    'Go for a walk', 'Take a nap', 'Sit outside',
+    'Gentle stretching', 'Watch something comforting', 'Snack and rehydrate',
+    'Breathwork', 'Do nothing on purpose', 'Pet an animal',
   ],
   buffer: [
     'Transition wind-down', 'Quick snack or water', 'Review what\'s next',
@@ -72,30 +90,36 @@ export const BLOCK_MENU_SUGGESTIONS: Record<BlockType, string[]> = {
 };
 
 export const BLOCK_TYPE_KEYWORDS: Record<string, BlockType> = {
-  // Deep focus
-  write: 'deep', code: 'deep', coding: 'deep', design: 'deep', research: 'deep',
-  study: 'deep', plan: 'deep', planning: 'deep', analyze: 'deep', develop: 'deep',
-  program: 'deep', programming: 'deep', essay: 'deep', report: 'deep', thesis: 'deep',
-  // Light tasks
-  read: 'light', review: 'light', brainstorm: 'light', sketch: 'light',
-  meeting: 'light', call: 'light', chat: 'light', discuss: 'light',
-  edit: 'light', proofread: 'light', outline: 'light',
-  // Admin
-  email: 'admin', emails: 'admin', invoice: 'admin', expense: 'admin', bill: 'admin',
-  clean: 'admin', organize: 'admin', errands: 'admin', laundry: 'admin',
-  dishes: 'admin', grocery: 'admin', groceries: 'admin', file: 'admin',
-  paperwork: 'admin', appointment: 'admin', schedule: 'admin',
-  // Recharge
-  workout: 'recharge', exercise: 'recharge', gym: 'recharge', walk: 'recharge',
-  yoga: 'recharge', stretch: 'recharge', meditate: 'recharge', meditation: 'recharge',
-  nap: 'recharge', rest: 'recharge', break: 'recharge', craft: 'recharge',
-  crafting: 'recharge', draw: 'recharge', drawing: 'recharge', paint: 'recharge',
-  painting: 'recharge', music: 'recharge', play: 'recharge', game: 'recharge',
-  garden: 'recharge', gardening: 'recharge', cook: 'recharge', cooking: 'recharge',
-  bake: 'recharge', baking: 'recharge',
+  // Push — high effort, hard to start
+  workout: 'push', gym: 'push', research: 'push', thesis: 'push',
+  study: 'push', plan: 'push', planning: 'push', analyze: 'push',
+  tackle: 'push', deadline: 'push', deep: 'push', intense: 'push',
+  // Flow — absorbing, creative
+  write: 'push', code: 'push', coding: 'push', design: 'flow',
+  craft: 'flow', crafting: 'flow', draw: 'flow', drawing: 'flow',
+  paint: 'flow', painting: 'flow', music: 'flow', play: 'flow',
+  garden: 'flow', gardening: 'flow', cook: 'flow', cooking: 'flow',
+  bake: 'flow', baking: 'flow', create: 'flow', build: 'flow',
+  // Steady — engaged but sustainable
+  meeting: 'steady', call: 'steady', chat: 'steady', discuss: 'steady',
+  review: 'steady', edit: 'steady', proofread: 'steady', errands: 'steady',
+  read: 'steady', outline: 'steady', prep: 'steady',
+  // Growth — self-investment
+  journal: 'growth', journaling: 'growth', therapy: 'growth', learn: 'growth',
+  course: 'growth', meditate: 'growth', meditation: 'growth', reflect: 'growth',
+  podcast: 'growth', book: 'growth', goals: 'growth', practice: 'growth',
+  // Drift — autopilot
+  email: 'drift', emails: 'drift', invoice: 'drift', expense: 'drift', bill: 'drift',
+  organize: 'drift', laundry: 'drift', dishes: 'drift', grocery: 'drift',
+  groceries: 'drift', file: 'drift', paperwork: 'drift', tidy: 'drift',
+  clean: 'drift', sort: 'drift', schedule: 'drift', appointment: 'drift',
+  // Rest — restorative
+  nap: 'rest', rest: 'rest', break: 'rest', walk: 'rest',
+  stretch: 'rest', yoga: 'rest', relax: 'rest', breathe: 'rest',
+  nothing: 'rest', recharge: 'rest',
 };
 
-export type BlockType = 'deep' | 'light' | 'admin' | 'recharge' | 'flex' | 'buffer';
+export type BlockType = 'push' | 'flow' | 'steady' | 'growth' | 'drift' | 'rest' | 'buffer';
 export type BlockStatus = 'pending' | 'done' | 'skipped' | 'dismissed';
 
 export interface FlowBlock {

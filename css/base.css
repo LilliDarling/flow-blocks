@@ -11,11 +11,12 @@
   --text-dim: #95a17f;        /* sage-400 */
   --accent: #1e8040;          /* brand-light */
   --accent-glow: rgba(30, 128, 64, 0.15);
-  --deep: #5b9ea6;
-  --light: #7abfc9;
-  --admin: #d4a574;
-  --recharge: #a78bda;
-  --flex: #d49aab;
+  --push: #5b9ea6;
+  --flow: #7abfc9;
+  --steady: #d4a574;
+  --growth: #a78bda;
+  --drift: #d49aab;
+  --rest: #7a9e7a;
   --danger: #d46a6a;
   --radius: 12px;
 }
@@ -31,11 +32,12 @@
   --text-dim: #5f6b4f;        /* sage-600 */
   --accent: #186733;          /* brand */
   --accent-glow: rgba(24, 103, 51, 0.12);
-  --deep: #2d6a4f;
-  --light: #5b9ea6;
-  --admin: #c4884a;
-  --recharge: #8b6cc1;
-  --flex: #c27a8e;
+  --push: #2d6a4f;
+  --flow: #5b9ea6;
+  --steady: #c4884a;
+  --growth: #8b6cc1;
+  --drift: #c27a8e;
+  --rest: #5a8a5a;
   --danger: #b84444;
 }
 

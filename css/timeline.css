@@ -173,11 +173,12 @@
   transform: translateX(4px);
 }
 
-.block-card.type-deep::before { background: var(--deep); }
-.block-card.type-light::before { background: var(--light); }
-.block-card.type-admin::before { background: var(--admin); }
-.block-card.type-recharge::before { background: var(--recharge); }
-.block-card.type-flex::before { background: var(--flex); }
+.block-card.type-push::before { background: var(--push); }
+.block-card.type-flow::before { background: var(--flow); }
+.block-card.type-steady::before { background: var(--steady); }
+.block-card.type-growth::before { background: var(--growth); }
+.block-card.type-drift::before { background: var(--drift); }
+.block-card.type-rest::before { background: var(--rest); }
 .block-card.type-buffer { border-style: dashed; opacity: 0.6; }
 .block-card.type-buffer::before { background: var(--border); }
 
@@ -198,11 +199,12 @@
   background: rgba(255, 255, 255, 0.06);
 }
 
-.type-deep .block-type-badge { color: var(--deep); }
-.type-light .block-type-badge { color: var(--light); }
-.type-admin .block-type-badge { color: var(--admin); }
-.type-recharge .block-type-badge { color: var(--recharge); }
-.type-flex .block-type-badge { color: var(--flex); }
+.type-push .block-type-badge { color: var(--push); }
+.type-flow .block-type-badge { color: var(--flow); }
+.type-steady .block-type-badge { color: var(--steady); }
+.type-growth .block-type-badge { color: var(--growth); }
+.type-drift .block-type-badge { color: var(--drift); }
+.type-rest .block-type-badge { color: var(--rest); }
 
 .block-duration {
   font-size: 0.7rem;
@@ -256,8 +258,8 @@
 }
 
 .block-action-btn.done-btn:hover {
-  border-color: var(--recharge);
-  color: var(--recharge);
+  border-color: var(--growth);
+  color: var(--growth);
 }
 
 .block-action-btn.skip-btn:hover {
@@ -288,7 +290,7 @@
 
 .done-list-section h3 {
   font-size: 0.85rem;
-  color: var(--recharge);
+  color: var(--growth);
   margin-bottom: 10px;
   font-weight: 600;
 }
@@ -365,7 +367,7 @@
   margin-top: 10px;
   font-size: 1.4rem;
   font-weight: 700;
-  color: var(--recharge);
+  color: var(--growth);
 }
 
 /* Reorder suggestion */

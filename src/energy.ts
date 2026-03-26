@@ -27,9 +27,9 @@ function fmtHour(h: number): string {
 }
 
 function barColor(avg: number): string {
-  if (avg <= 3) return '#ef4444';
-  if (avg <= 6) return '#f59e0b';
-  return '#34d399';
+  if (avg <= 3) return 'var(--danger)';
+  if (avg <= 6) return 'var(--steady)';
+  return 'var(--push)';
 }
 
 export function renderEnergyAnalytics(): void {
@@ -68,8 +68,8 @@ export function renderEnergyAnalytics(): void {
   const overall = logs.reduce((s, l) => s + l.value, 0) / logs.length;
 
   const insightItems: string[] = [];
-  if (peak) insightItems.push(`Your peak energy tends to be around <strong>${fmtHour(peak.hour)}</strong> (avg ${peak.avg.toFixed(1)}) — schedule deep focus here.`);
-  if (low && low.hour !== peak.hour) insightItems.push(`Energy dips around <strong>${fmtHour(low.hour)}</strong> (avg ${low.avg.toFixed(1)}) — good slot for admin or recharge.`);
+  if (peak) insightItems.push(`Your peak energy tends to be around <strong>${fmtHour(peak.hour)}</strong> (avg ${peak.avg.toFixed(1)}) — great time for push or flow blocks.`);
+  if (low && low.hour !== peak.hour) insightItems.push(`Energy dips around <strong>${fmtHour(low.hour)}</strong> (avg ${low.avg.toFixed(1)}) — good slot for drift or rest.`);
   insightItems.push(`Overall average: <strong>${overall.toFixed(1)}/10</strong> across ${logs.length} check-ins.`);
 
   insights.innerHTML = insightItems.map(i => `<div class="energy-insight">${i}</div>`).join('');

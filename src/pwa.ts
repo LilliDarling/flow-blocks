@@ -76,6 +76,8 @@ function registerServiceWorker(): void {
         }
       });
     });
+  }).catch(() => {
+    // SW blocked (dev mode, incognito, or browser policy) — app works fine without it
   });
 }
 

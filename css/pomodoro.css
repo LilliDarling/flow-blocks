@@ -403,8 +403,8 @@
 }
 
 .pomo-sound-toggle.on {
-  border-color: var(--recharge);
-  color: var(--recharge);
+  border-color: var(--growth);
+  color: var(--growth);
 }
 
 /* --- Mobile --- */

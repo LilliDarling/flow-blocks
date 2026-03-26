@@ -65,9 +65,9 @@
 .add-reminder-btn {
   padding: 8px 16px;
   border-radius: 20px;
-  border: 1px dashed var(--recharge);
+  border: 1px dashed var(--growth);
   background: transparent;
-  color: var(--recharge);
+  color: var(--growth);
   cursor: pointer;
   font-size: 0.85rem;
   font-family: inherit;
@@ -94,7 +94,7 @@
 
 .reminder-progress-fill {
   height: 100%;
-  background: var(--recharge);
+  background: var(--growth);
   border-radius: 3px;
   transition: width 0.4s ease;
 }
@@ -121,7 +121,7 @@
 }
 
 .reminder-item:hover {
-  border-color: var(--recharge);
+  border-color: var(--growth);
 }
 
 .reminder-item.reminder-done {
@@ -138,7 +138,7 @@
   border-radius: 50%;
   border: 2px solid var(--border);
   background: transparent;
-  color: var(--recharge);
+  color: var(--growth);
   font-size: 0.8rem;
   cursor: pointer;
   display: flex;
@@ -150,12 +150,12 @@
 }
 
 .reminder-done .reminder-check {
-  border-color: var(--recharge);
+  border-color: var(--growth);
   background: rgba(139, 108, 193, 0.15);
 }
 
 .reminder-check:hover {
-  border-color: var(--recharge);
+  border-color: var(--growth);
   background: rgba(139, 108, 193, 0.1);
 }
 

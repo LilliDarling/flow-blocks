@@ -44,9 +44,9 @@ function showSuccess(msg: string): void {
   const el = $id('authError');
   el.textContent = msg;
   el.style.display = 'block';
-  el.style.color = 'var(--recharge)';
+  el.style.color = 'var(--growth)';
   (el as HTMLElement).style.background = 'var(--accent-glow)';
-  (el as HTMLElement).style.borderLeft = '3px solid var(--recharge)';
+  (el as HTMLElement).style.borderLeft = '3px solid var(--growth)';
 }
 
 function clearError(): void {

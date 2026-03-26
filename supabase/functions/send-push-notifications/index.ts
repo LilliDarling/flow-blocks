@@ -309,8 +309,8 @@ serve(async () => {
     if (recentLogs && recentLogs > 0) continue;
 
     const payload = JSON.stringify({
-      title: '\u26A1 Energy Check-in',
-      body: 'Quick check \u2014 how is your energy right now?',
+      title: '\uD83C\uDF31 Energy Check-in',
+      body: 'How are you feeling right now? Log your energy.',
       icon: '/icons/icon.png',
       tag: 'energy-checkin',
       url: '/?action=energy-checkin',

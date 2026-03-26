@@ -146,7 +146,7 @@
   <button class="tab-btn">Reminders</button>
   <button class="tab-btn">Pomodoro</button>
   <button class="tab-btn">Energy</button>
-  <button class="tab-btn">Brain Tips</button>
+  <button class="tab-btn">Grow Tips</button>
 </div>
 
 <!-- DAY VIEW -->
@@ -183,7 +183,7 @@
 <div class="view" id="routines-view">
   <div class="reminders-section" id="remindersSection">
     <div class="notif-opt-in" id="notifOptIn" style="display:none">
-      <span>Enable push notifications to get reminders and energy check-ins</span>
+      <span>Enable notifications for reminders and energy check-ins</span>
       <button class="btn btn-primary btn-sm" id="notifOptInBtn">Enable</button>
       <button class="notif-opt-in-dismiss" id="notifOptInDismiss">&times;</button>
     </div>
@@ -316,32 +316,36 @@
 <div class="view" id="tips-view">
   <div class="tips-view">
     <div class="tip-card">
-      <h3><span class="tip-icon">🧠</span> Energy-first, not time-first</h3>
-      <p>Your brain doesn't run on a clock — it runs on energy and interest. Schedule block <em>types</em> (deep focus, light tasks, admin) rather than specific tasks. When you arrive at a block, pick from your menu based on what your brain can actually handle right now.</p>
+      <h3><span class="tip-icon">🌱</span> Energy-first, not time-first</h3>
+      <p>You don't run on a clock — you run on energy and interest. Schedule block <em>types</em> (push, flow, steady, drift) based on what each task demands from you. When you arrive at a block, pick from your menu based on what you can actually handle right now.</p>
     </div>
     <div class="tip-card">
       <h3><span class="tip-icon">🚪</span> Transition buffers are airlocks</h3>
-      <p>Task-switching with ADHD is like turning a cargo ship — it takes time. Those 10-15 minute buffers between blocks aren't wasted time; they're the space your brain needs to let go of one thing and gear up for the next. Protect them fiercely.</p>
+      <p>Switching gears takes time — more than you think. Those 10-15 minute buffers between blocks aren't wasted time; they're the space you need to let go of one thing and gear up for the next. Protect them fiercely.</p>
     </div>
     <div class="tip-card">
       <h3><span class="tip-icon">🍽️</span> The menu approach</h3>
-      <p>Give yourself 2-3 task options per block. "Deep focus: write report OR organize files OR research project." Your brain gets autonomy and novelty, which makes engagement way more likely than a single rigid assignment.</p>
+      <p>Give yourself 2-3 task options per block. "Push: tackle report OR deep-clean kitchen OR intense workout." Having choices gives you autonomy and novelty, which makes engagement way more likely than a single rigid assignment.</p>
     </div>
     <div class="tip-card">
       <h3><span class="tip-icon">⚓</span> Anchor, don't chain</h3>
-      <p>Pick 2-3 non-negotiable anchors for your day (morning review, one deep block, wind-down). Let everything else flex around those. Fewer rigid commitments = less guilt when things shift, which they will. And that's fine.</p>
+      <p>Pick 2-3 non-negotiable anchors for your day (morning check-in, one push block, wind-down). Let everything else flex around those. Fewer rigid commitments = less guilt when things shift, which they will. And that's fine.</p>
     </div>
     <div class="tip-card">
       <h3><span class="tip-icon">✅</span> Track what you DID, not just what you planned</h3>
-      <p>ADHD brains chronically undercount their output. The "done list" at the bottom of your day view exists for this reason. Mark things complete as you go — you'll be surprised how much you actually accomplish.</p>
+      <p>We tend to undercount our own output. The "done list" at the bottom of your day view exists for this reason. Mark things complete as you go — you'll be surprised how much you actually accomplish.</p>
     </div>
     <div class="tip-card">
-      <h3><span class="tip-icon">🔋</span> Low energy ≠ lazy</h3>
-      <p>Some days your battery is at 30%. That's data, not a character flaw. On low-energy days, lean into light tasks and admin. Trying to force deep focus when you're depleted just creates shame spirals. Respect the battery level.</p>
+      <h3><span class="tip-icon">🔋</span> Low energy is data, not a flaw</h3>
+      <p>Some days your battery is at 30%. That's information, not a character flaw. On low-energy days, lean into drift and rest blocks. Trying to force a push when you're depleted just creates shame spirals. Respect the battery level.</p>
+    </div>
+    <div class="tip-card">
+      <h3><span class="tip-icon">🌿</span> Growth isn't always productive</h3>
+      <p>Journaling, therapy, learning, reflecting — these are growth blocks. They don't produce a deliverable, but they're some of the most important work you'll do. Give them space in your day without guilt.</p>
     </div>
     <div class="tip-card">
       <h3><span class="tip-icon">🔄</span> The "good enough" schedule</h3>
-      <p>Perfectionism kills ADHD productivity systems. If you followed 60% of your plan, that's a win. The goal isn't robotic adherence — it's gentle structure that catches you when executive function dips.</p>
+      <p>Perfectionism kills every system eventually. If you followed 60% of your plan, that's a win. The goal isn't robotic adherence — it's gentle structure that catches you when motivation dips.</p>
     </div>
 
     <div class="data-notice">
@@ -368,17 +372,19 @@
     <div class="form-group">
       <label>Block type</label>
       <div class="type-options">
-        <button class="type-option" data-type="deep"><span class="type-dot" style="background:var(--deep)"></span>Deep Focus</button>
-        <button class="type-option" data-type="light"><span class="type-dot" style="background:var(--light)"></span>Light Tasks</button>
-        <button class="type-option" data-type="admin"><span class="type-dot" style="background:var(--admin)"></span>Admin</button>
-        <button class="type-option" data-type="recharge"><span class="type-dot" style="background:var(--recharge)"></span>Recharge</button>
-        <button class="type-option" data-type="flex"><span class="type-dot" style="background:var(--flex)"></span>Flex</button>
+        <button class="type-option" data-type="push"><span class="type-dot" style="background:var(--push)"></span>Push</button>
+        <button class="type-option" data-type="flow"><span class="type-dot" style="background:var(--flow)"></span>Flow</button>
+        <button class="type-option" data-type="steady"><span class="type-dot" style="background:var(--steady)"></span>Steady</button>
+        <button class="type-option" data-type="growth"><span class="type-dot" style="background:var(--growth)"></span>Growth</button>
+        <button class="type-option" data-type="drift"><span class="type-dot" style="background:var(--drift)"></span>Drift</button>
+        <button class="type-option" data-type="rest"><span class="type-dot" style="background:var(--rest)"></span>Rest</button>
         <button class="type-option" data-type="buffer"><span class="type-dot" style="background:var(--border)"></span>Buffer</button>
       </div>
+      <div class="type-description" id="typeDescription"></div>
     </div>
     <div class="form-group">
       <label>Title (or leave blank to decide later)</label>
-      <input type="text" id="blockTitle" placeholder="e.g. Morning deep work">
+      <input type="text" id="blockTitle" placeholder="e.g. Morning workout">
     </div>
     <div class="form-group">
       <label>Menu options — what could you do in this block? (one per line)</label>
@@ -487,7 +493,7 @@
 
 <!-- Energy check-in toast -->
 <div class="energy-checkin-toast" id="energyCheckinToast" style="display:none">
-  <span class="checkin-label">Quick energy check — how are you right now?</span>
+  <span class="checkin-label">How are you feeling right now?</span>
   <div class="checkin-buttons">
     <button class="energy-btn energy-low" data-checkin="low">Low</button>
     <button class="energy-btn energy-med" data-checkin="med">Med</button>

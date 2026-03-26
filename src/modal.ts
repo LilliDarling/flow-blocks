@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { DAYS, BlockType, FlowBlock, fmtTime, addMinutes, $id, getTodayIndex, getTodayDate, getDateForDayIndex, TYPE_LABELS, BLOCK_TYPE_KEYWORDS, BLOCK_MENU_SUGGESTIONS } from './utils.js';
+import { DAYS, BlockType, FlowBlock, fmtTime, addMinutes, $id, getTodayIndex, getTodayDate, getDateForDayIndex, TYPE_LABELS, TYPE_DESCRIPTIONS, BLOCK_TYPE_KEYWORDS, BLOCK_MENU_SUGGESTIONS } from './utils.js';
 import { renderTimeline } from './timeline.js';
 import { renderWeek } from './week.js';
 import { confirmDelete } from './confirm-delete.js';
@@ -56,6 +56,7 @@ export function openModal(index = -1): void {
   state.selectedType = '';
   state.selectedDays = [];
   suggestedType = null;
+  $id('typeDescription').textContent = '';
 
   $id('deleteBtn').style.display = index >= 0 ? 'block' : 'none';
   $id('modalTitle').textContent = index >= 0 ? 'Edit Block' : 'Add Block';
@@ -71,6 +72,7 @@ export function openModal(index = -1): void {
     const b = state.blocks[index];
     state.selectedType = b.type;
     state.selectedDays = [...b.days];
+    $id('typeDescription').textContent = TYPE_DESCRIPTIONS[b.type] || '';
     titleInput.value = b.title;
     menuInput.value = b.menu.join('\n');
     startSelect.value = b.start;
@@ -109,6 +111,7 @@ export function openModalForSlot(dayIdx: number, hour: string): void {
   state.editingIndex = -1;
   state.selectedType = '';
   state.selectedDays = [dayIdx];
+  $id('typeDescription').textContent = '';
 
   $id('deleteBtn').style.display = 'none';
   $id('modalTitle').textContent = 'Add Block';
@@ -133,6 +136,7 @@ function selectType(type: string): void {
   suggestedType = null;
   renderTypeSelection();
   renderMenuSuggestions(type as BlockType);
+  $id('typeDescription').textContent = TYPE_DESCRIPTIONS[type as BlockType] || '';
 }
 
 function renderMenuSuggestions(type: BlockType): void {

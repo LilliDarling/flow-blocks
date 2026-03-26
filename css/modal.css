@@ -36,6 +36,14 @@
   gap: 8px;
 }
 
+.type-description {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-top: 8px;
+  min-height: 1.2em;
+  font-style: italic;
+}
+
 .type-option {
   padding: 10px;
   border-radius: 8px;
