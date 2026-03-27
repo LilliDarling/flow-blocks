@@ -42,35 +42,54 @@ export function renderWeek(): void {
     DAYS.forEach((_, dayIdx) => {
       const date = getDateForDayIndex(dayIdx);
 
-      // Check for a flow block at this hour
-      const block = state.blocks.find(b => {
+      // Find ALL flow blocks at this hour
+      const matchedBlocks = state.blocks.filter(b => {
         if (!blockVisibleOnDay(b, dayIdx)) return false;
         const [bh] = b.start.split(':').map(Number);
         const endH = bh + b.duration / 60;
         return h >= bh && h < endH;
       });
 
-      // Check for a calendar event at this hour
+      // Find ALL calendar events at this hour
       const dayEvents = state.weekCalendarEvents.get(date) || [];
-      const calEvent = !block ? dayEvents.find(e => {
+      const calEvents = dayEvents.filter(e => {
         if (e.allDay) return false;
         const [eh] = e.start.split(':').map(Number);
         const endH = eh + e.duration / 60;
         return h >= eh && h < endH;
-      }) : undefined;
+      });
 
-      if (block) {
+      const totalItems = matchedBlocks.length + calEvents.length;
+
+      if (totalItems === 0) {
+        html += `<div class="week-cell" data-day="${dayIdx}" data-hour="${hour}"></div>`;
+      } else if (totalItems === 1 && matchedBlocks.length === 1) {
+        const block = matchedBlocks[0];
         const ridx = state.blocks.indexOf(block);
         html += `<div class="week-cell filled type-${block.type}" data-block-index="${ridx}">
           <div class="week-cell-label">${block.title || TYPE_LABELS[block.type]}</div>
         </div>`;
-      } else if (calEvent) {
+      } else if (totalItems === 1 && calEvents.length === 1) {
+        const calEvent = calEvents[0];
         const colorIdx = dayEvents.indexOf(calEvent) % 8;
         html += `<div class="week-cell filled calendar-event cal-color-${colorIdx}">
           <div class="week-cell-label">${calEvent.title}</div>
         </div>`;
       } else {
-        html += `<div class="week-cell" data-day="${dayIdx}" data-hour="${hour}"></div>`;
+        html += `<div class="week-cell filled multi">`;
+        matchedBlocks.forEach(block => {
+          const ridx = state.blocks.indexOf(block);
+          html += `<div class="week-block type-${block.type}" data-block-index="${ridx}">
+            <div class="week-cell-label">${block.title || TYPE_LABELS[block.type]}</div>
+          </div>`;
+        });
+        calEvents.forEach(calEvent => {
+          const colorIdx = dayEvents.indexOf(calEvent) % 8;
+          html += `<div class="week-block calendar-event cal-color-${colorIdx}">
+            <div class="week-cell-label">${calEvent.title}</div>
+          </div>`;
+        });
+        html += `</div>`;
       }
     });
   });
@@ -80,9 +99,9 @@ export function renderWeek(): void {
 
 export function initWeekEvents(): void {
   $id('weekGrid').addEventListener('dblclick', (e) => {
-    const cell = (e.target as HTMLElement).closest('.week-cell.filled') as HTMLElement | null;
-    if (cell && cell.dataset.blockIndex) {
-      openModal(parseInt(cell.dataset.blockIndex));
+    const el = (e.target as HTMLElement).closest('[data-block-index]') as HTMLElement | null;
+    if (el && el.dataset.blockIndex) {
+      openModal(parseInt(el.dataset.blockIndex));
     }
   });
 

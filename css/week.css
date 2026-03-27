@@ -72,6 +72,47 @@
 .week-cell.calendar-event.cal-color-6::before { background: #b87a3d; }
 .week-cell.calendar-event.cal-color-7::before { background: #4a8f7a; }
 
+/* Multi-block cells: show blocks side by side */
+.week-cell.multi {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+}
+
+.week-block {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 4px;
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+  background: var(--surface2);
+  cursor: pointer;
+}
+
+.week-block::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+}
+
+.week-block.type-push::before { background: var(--push); }
+.week-block.type-flow::before { background: var(--flow); }
+.week-block.type-steady::before { background: var(--steady); }
+.week-block.type-growth::before { background: var(--growth); }
+.week-block.type-drift::before { background: var(--drift); }
+.week-block.type-rest::before { background: var(--rest); }
+
+.week-block.calendar-event.cal-color-0::before { background: #2d6a4f; }
+.week-block.calendar-event.cal-color-1::before { background: #5b9ea6; }
+.week-block.calendar-event.cal-color-2::before { background: #c4884a; }
+.week-block.calendar-event.cal-color-3::before { background: #8b6cc1; }
+.week-block.calendar-event.cal-color-4::before { background: #c27a8e; }
+.week-block.calendar-event.cal-color-5::before { background: #7a8866; }
+.week-block.calendar-event.cal-color-6::before { background: #b87a3d; }
+.week-block.calendar-event.cal-color-7::before { background: #4a8f7a; }
+
 .week-cell-label {
   font-weight: 500;
   font-size: 0.7rem;
