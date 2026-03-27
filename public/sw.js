@@ -1,4 +1,4 @@
-const CACHE_NAME = 'wildbloom-v2.0';
+const CACHE_NAME = 'wildbloom-v2.1';
 const PRECACHE = [
   '/',
 ];
