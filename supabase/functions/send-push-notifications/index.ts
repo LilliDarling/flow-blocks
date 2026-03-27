@@ -321,6 +321,41 @@ serve(async () => {
     sent += await sendToAll(userSubs, payload);
   }
 
+  // --- Pomodoro timer notifications ---
+  // When a user starts a pomo session, the client saves the expected completion
+  // time.  If the app is suspended (e.g. iOS PWA), the cron picks it up here.
+
+  const { data: duePomo } = await supabase
+    .from('pomo_active_timers')
+    .select('*')
+    .lte('complete_at', now.toISOString());
+
+  if (duePomo && duePomo.length > 0) {
+    for (const timer of duePomo) {
+      const userSubs = subsByUser.get(timer.user_id);
+      if (userSubs) {
+        const title = timer.mode === 'focus' ? 'Focus complete' : 'Break over';
+        const body = timer.mode === 'focus'
+          ? (timer.task ? `"${timer.task}" — time for a break.` : 'Great work — time for a break.')
+          : 'Ready for another focus session?';
+
+        const payload = JSON.stringify({
+          title,
+          body,
+          icon: '/icons/icon.png',
+          tag: 'pomo-complete',
+          url: '/',
+          type: 'pomo-complete',
+        });
+
+        sent += await sendToAll(userSubs, payload);
+      }
+
+      // Delete the timer row regardless (expired)
+      await supabase.from('pomo_active_timers').delete().eq('user_id', timer.user_id);
+    }
+  }
+
   return new Response(JSON.stringify({ sent }), {
     headers: { 'Content-Type': 'application/json' },
   });

@@ -1,4 +1,5 @@
 import { state } from './state.js';
+import { supabase } from './supabase.js';
 import { PomoMode, $id } from './utils.js';
 
 const RING_CIRCUMFERENCE = 2 * Math.PI * 124;
@@ -78,6 +79,7 @@ function restoreTimer(): boolean {
       pomo.secondsLeft = remaining;
       pomo.running = true;
       startTicking();
+      scheduleCompletionTimeout();
     }
 
     return true;
@@ -89,6 +91,64 @@ function restoreTimer(): boolean {
 
 function clearTimerStorage(): void {
   sessionStorage.removeItem(STORAGE_KEY);
+}
+
+// --- Completion timeout (backup for throttled setInterval in background) ---
+
+let completionTimeout: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleCompletionTimeout(): void {
+  clearCompletionTimeout();
+  const { pomo } = state;
+  if (!pomo.running || pomo.secondsLeft <= 0) return;
+
+  completionTimeout = setTimeout(() => {
+    completionTimeout = null;
+    if (!state.pomo.running) return;
+    // Recalculate from saved timestamp for precision
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      try {
+        const snap: TimerSnapshot = JSON.parse(raw);
+        if (snap.pausedRemaining !== null) return;
+        const elapsed = Math.floor((Date.now() - snap.startedAt) / 1000);
+        if (snap.totalSeconds - elapsed > 1) return; // not actually done yet
+      } catch { /* proceed with completion */ }
+    }
+    state.pomo.secondsLeft = 0;
+    state.pomo.running = false;
+    stopTicking();
+    complete();
+  }, pomo.secondsLeft * 1000);
+}
+
+function clearCompletionTimeout(): void {
+  if (completionTimeout) { clearTimeout(completionTimeout); completionTimeout = null; }
+}
+
+// --- Server-side push timer (reliable notification when app is suspended) ---
+
+async function savePushTimer(): Promise<void> {
+  if (!state.userId) return;
+  const { pomo } = state;
+  if (!pomo.running) return;
+  const completeAt = new Date(Date.now() + pomo.secondsLeft * 1000).toISOString();
+  await supabase.from('pomo_active_timers').upsert({
+    user_id: state.userId,
+    complete_at: completeAt,
+    task: currentTask || '',
+    mode: pomo.mode,
+  }).then(({ error }) => {
+    if (error) console.warn('[pomo] push timer save failed:', error.message);
+  });
+}
+
+async function clearPushTimer(): Promise<void> {
+  if (!state.userId) return;
+  supabase.from('pomo_active_timers').delete().eq('user_id', state.userId)
+    .then(({ error }) => {
+      if (error) console.warn('[pomo] push timer clear failed:', error.message);
+    });
 }
 
 // --- Notifications ---
@@ -287,7 +347,9 @@ function stopTicking(): void {
 function complete(): void {
   const { pomo } = state;
   stopTicking();
+  clearCompletionTimeout();
   clearTimerStorage();
+  clearPushTimer();
 
   if (pomo.soundOn) playSound();
 
@@ -346,12 +408,14 @@ function tick(): void {
 function setMode(mode: PomoMode): void {
   const { pomo } = state;
   stopTicking();
+  clearCompletionTimeout();
   pomo.running = false;
   pomo.mode = mode;
   syncSettingsFromInputs();
   pomo.totalSeconds = getDuration(mode) * 60;
   pomo.secondsLeft = pomo.totalSeconds;
   clearTimerStorage();
+  clearPushTimer();
   render();
 }
 
@@ -359,7 +423,9 @@ function toggle(): void {
   const { pomo } = state;
   if (pomo.running) {
     stopTicking();
+    clearCompletionTimeout();
     pomo.running = false;
+    clearPushTimer();
   } else {
     // Sync settings from inputs before starting a fresh session
     if (pomo.secondsLeft === pomo.totalSeconds) {
@@ -378,6 +444,8 @@ function toggle(): void {
     requestNotificationPermission();
     pomo.running = true;
     startTicking();
+    scheduleCompletionTimeout();
+    savePushTimer();
   }
   saveTimer();
   render();
@@ -386,14 +454,17 @@ function toggle(): void {
 function reset(): void {
   const { pomo } = state;
   stopTicking();
+  clearCompletionTimeout();
   pomo.running = false;
   pomo.secondsLeft = pomo.totalSeconds;
   clearTimerStorage();
+  clearPushTimer();
   render();
 }
 
 function skip(): void {
   stopTicking();
+  clearCompletionTimeout();
   state.pomo.running = false;
   complete();
 }
@@ -463,6 +534,7 @@ function onVisibilityChange(): void {
       complete();
     } else {
       state.pomo.secondsLeft = remaining;
+      scheduleCompletionTimeout();
       render();
     }
   } catch { /* ignore */ }
