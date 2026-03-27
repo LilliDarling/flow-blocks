@@ -182,17 +182,37 @@ function initLegalLinks(): void {
   const privacyPage = document.getElementById('privacyPage')!;
   const tosPage = document.getElementById('tosPage')!;
 
+  function showLegal(page: HTMLElement, hash: string): void {
+    page.style.display = 'block';
+    page.scrollTop = 0;
+    if (location.hash !== hash) history.pushState(null, '', hash);
+  }
+
+  function hideLegal(page: HTMLElement): void {
+    page.style.display = 'none';
+    if (location.hash === '#privacy' || location.hash === '#tos') history.pushState(null, '', location.pathname);
+  }
+
+  function handleHash(): void {
+    privacyPage.style.display = location.hash === '#privacy' ? 'block' : 'none';
+    tosPage.style.display = location.hash === '#tos' ? 'block' : 'none';
+  }
+
   document.addEventListener('click', (e) => {
     const link = (e.target as HTMLElement).closest('[data-legal]') as HTMLElement | null;
     if (!link) return;
     e.preventDefault();
-    const page = link.dataset.legal === 'tos' ? tosPage : privacyPage;
-    page.style.display = 'block';
-    page.scrollTop = 0;
+    const isTos = link.dataset.legal === 'tos';
+    showLegal(isTos ? tosPage : privacyPage, isTos ? '#tos' : '#privacy');
   });
 
-  document.getElementById('privacyBack')!.addEventListener('click', () => { privacyPage.style.display = 'none'; });
-  document.getElementById('tosBack')!.addEventListener('click', () => { tosPage.style.display = 'none'; });
+  document.getElementById('privacyBack')!.addEventListener('click', () => hideLegal(privacyPage));
+  document.getElementById('tosBack')!.addEventListener('click', () => hideLegal(tosPage));
+
+  window.addEventListener('hashchange', handleHash);
+
+  // Show legal page if URL already has the hash on load
+  handleHash();
 })();
 
 // --- Init ---
