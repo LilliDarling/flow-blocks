@@ -3,6 +3,12 @@ import { DAYS, TYPE_LABELS, getTodayIndex, getTodayDate, getDateForDayIndex, Flo
 import { openModal, openModalForSlot } from './modal.js';
 import type { CalendarEvent } from './calendar/types.js';
 
+const START_HOUR = 6;
+const END_HOUR = 22;
+const TOTAL_HOURS = END_HOUR - START_HOUR + 1;
+const HOUR_H = 44;
+const COL_HEIGHT = TOTAL_HOURS * HOUR_H;
+
 function blockVisibleOnDay(b: FlowBlock, dayIdx: number): boolean {
   if (b.date) {
     const d = new Date(b.date + 'T00:00:00');
@@ -19,79 +25,114 @@ function blockVisibleOnDay(b: FlowBlock, dayIdx: number): boolean {
   return true;
 }
 
+interface DayItem {
+  startMin: number;
+  endMin: number;
+  block?: FlowBlock;
+  blockIdx?: number;
+  calEvent?: CalendarEvent;
+  calColorIdx?: number;
+}
+
 export function renderWeek(): void {
   const grid = $id('weekGrid');
-  const hours: string[] = [];
-  for (let h = 6; h <= 22; h++) {
-    hours.push(`${h.toString().padStart(2, '0')}:00`);
-  }
-
   const todayIdx = getTodayIndex();
 
+  // Headers
   let html = '<div class="week-header"></div>';
   DAYS.forEach((d, i) => {
     html += `<div class="week-header ${i === todayIdx ? 'today' : ''}">${d}</div>`;
   });
 
-  hours.forEach(hour => {
-    const h = parseInt(hour);
+  // Time labels column
+  html += `<div class="week-times" style="height:${COL_HEIGHT}px">`;
+  for (let h = START_HOUR; h <= END_HOUR; h++) {
     const ampm = h >= 12 ? 'PM' : 'AM';
     const h12 = h % 12 || 12;
-    html += `<div class="week-time-label">${h12}${ampm}</div>`;
+    const top = (h - START_HOUR) * HOUR_H;
+    html += `<div class="week-time-label" style="top:${top}px">${h12}${ampm}</div>`;
+  }
+  html += '</div>';
 
-    DAYS.forEach((_, dayIdx) => {
-      const date = getDateForDayIndex(dayIdx);
+  // Day columns
+  DAYS.forEach((_, dayIdx) => {
+    const date = getDateForDayIndex(dayIdx);
+    html += `<div class="week-day-col" style="height:${COL_HEIGHT}px">`;
 
-      // Find ALL flow blocks at this hour
-      const matchedBlocks = state.blocks.filter(b => {
-        if (!blockVisibleOnDay(b, dayIdx)) return false;
-        const [bh] = b.start.split(':').map(Number);
-        const endH = bh + b.duration / 60;
-        return h >= bh && h < endH;
-      });
+    // Hour slot backgrounds (clickable to create new blocks)
+    for (let h = START_HOUR; h <= END_HOUR; h++) {
+      const top = (h - START_HOUR) * HOUR_H;
+      const hour = `${h.toString().padStart(2, '0')}:00`;
+      html += `<div class="week-hour-slot" style="top:${top}px;height:${HOUR_H}px" data-day="${dayIdx}" data-hour="${hour}"></div>`;
+    }
 
-      // Find ALL calendar events at this hour
-      const dayEvents = state.weekCalendarEvents.get(date) || [];
-      const calEvents = dayEvents.filter(e => {
-        if (e.allDay) return false;
-        const [eh] = e.start.split(':').map(Number);
-        const endH = eh + e.duration / 60;
-        return h >= eh && h < endH;
-      });
+    // Collect all items for this day
+    const items: DayItem[] = [];
 
-      const totalItems = matchedBlocks.length + calEvents.length;
-
-      if (totalItems === 0) {
-        html += `<div class="week-cell" data-day="${dayIdx}" data-hour="${hour}"></div>`;
-      } else if (totalItems === 1 && matchedBlocks.length === 1) {
-        const block = matchedBlocks[0];
-        const ridx = state.blocks.indexOf(block);
-        html += `<div class="week-cell filled type-${block.type}" data-block-index="${ridx}">
-          <div class="week-cell-label">${block.title || TYPE_LABELS[block.type]}</div>
-        </div>`;
-      } else if (totalItems === 1 && calEvents.length === 1) {
-        const calEvent = calEvents[0];
-        const colorIdx = dayEvents.indexOf(calEvent) % 8;
-        html += `<div class="week-cell filled calendar-event cal-color-${colorIdx}">
-          <div class="week-cell-label">${calEvent.title}</div>
-        </div>`;
-      } else {
-        html += `<div class="week-cell filled multi">`;
-        matchedBlocks.forEach(block => {
-          const ridx = state.blocks.indexOf(block);
-          html += `<div class="week-block type-${block.type}" data-block-index="${ridx}">
-            <div class="week-cell-label">${block.title || TYPE_LABELS[block.type]}</div>
-          </div>`;
-        });
-        calEvents.forEach(calEvent => {
-          const colorIdx = dayEvents.indexOf(calEvent) % 8;
-          html += `<div class="week-block calendar-event cal-color-${colorIdx}">
-            <div class="week-cell-label">${calEvent.title}</div>
-          </div>`;
-        });
-        html += `</div>`;
-      }
+    state.blocks.forEach((b, idx) => {
+      if (!blockVisibleOnDay(b, dayIdx)) return;
+      const [bh, bm] = b.start.split(':').map(Number);
+      const startMin = bh * 60 + (bm || 0);
+      const endMin = startMin + b.duration;
+      items.push({ startMin, endMin, block: b, blockIdx: idx });
     });
+
+    const dayEvents = state.weekCalendarEvents.get(date) || [];
+    dayEvents.forEach((e, eIdx) => {
+      if (e.allDay) return;
+      const [eh, em] = e.start.split(':').map(Number);
+      const startMin = eh * 60 + (em || 0);
+      const endMin = startMin + e.duration;
+      items.push({ startMin, endMin, calEvent: e, calColorIdx: eIdx % 8 });
+    });
+
+    // Greedy column assignment for overlapping items
+    const sorted = [...items].sort((a, b) => a.startMin - b.startMin || (b.endMin - b.startMin) - (a.endMin - a.startMin));
+    const colMap = new Map<DayItem, number>();
+    const colEnds: number[] = [];
+
+    for (const item of sorted) {
+      let col = colEnds.findIndex(end => end <= item.startMin);
+      if (col === -1) {
+        col = colEnds.length;
+        colEnds.push(item.endMin);
+      } else {
+        colEnds[col] = item.endMin;
+      }
+      colMap.set(item, col);
+    }
+
+    // Render positioned items
+    for (const item of items) {
+      const col = colMap.get(item)!;
+
+      // Find max column index among items overlapping with this one
+      let maxCol = col;
+      for (const other of items) {
+        if (other === item) continue;
+        if (other.startMin < item.endMin && other.endMin > item.startMin) {
+          maxCol = Math.max(maxCol, colMap.get(other)!);
+        }
+      }
+      const totalCols = maxCol + 1;
+
+      const top = ((item.startMin / 60) - START_HOUR) * HOUR_H;
+      const height = Math.max(((item.endMin - item.startMin) / 60) * HOUR_H, 18);
+      const left = (col / totalCols) * 100;
+      const width = (1 / totalCols) * 100;
+
+      if (item.block) {
+        html += `<div class="week-block type-${item.block.type}" data-block-index="${item.blockIdx}" style="top:${top}px;height:${height}px;left:${left}%;width:${width}%">
+          <div class="week-cell-label">${item.block.title || TYPE_LABELS[item.block.type]}</div>
+        </div>`;
+      } else if (item.calEvent) {
+        html += `<div class="week-block calendar-event cal-color-${item.calColorIdx}" style="top:${top}px;height:${height}px;left:${left}%;width:${width}%">
+          <div class="week-cell-label">${item.calEvent.title}</div>
+        </div>`;
+      }
+    }
+
+    html += '</div>';
   });
 
   grid.innerHTML = html;
@@ -106,9 +147,9 @@ export function initWeekEvents(): void {
   });
 
   $id('weekGrid').addEventListener('click', (e) => {
-    const cell = (e.target as HTMLElement).closest('.week-cell:not(.filled)') as HTMLElement | null;
-    if (cell && cell.dataset.day && cell.dataset.hour) {
-      openModalForSlot(parseInt(cell.dataset.day), cell.dataset.hour);
+    const slot = (e.target as HTMLElement).closest('.week-hour-slot') as HTMLElement | null;
+    if (slot && slot.dataset.day && slot.dataset.hour) {
+      openModalForSlot(parseInt(slot.dataset.day), slot.dataset.hour);
     }
   });
 }

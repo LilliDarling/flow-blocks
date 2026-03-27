@@ -28,24 +28,37 @@ async function handleInstallClick(): Promise<void> {
 // --- Update handling ---
 
 let updateReady = false;
+let applyingUpdate = false;
 
 function showUpdateToast(): void {
   $id('updateToast').style.display = 'flex';
 }
 
 function applyUpdate(): void {
+  if (applyingUpdate) return;
+  applyingUpdate = true;
+
+  // Listen for controller change before sending skip-waiting
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    window.location.reload();
+  });
+
   navigator.serviceWorker.getRegistration().then((reg) => {
     if (reg?.waiting) {
       reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+    } else {
+      // Waiting worker already activated or was evicted — just reload
+      window.location.reload();
     }
-  });
-  // Reload once the new SW takes over
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    window.location.reload();
   });
 }
 
 function handleUpdateClick(): void {
+  if (applyingUpdate) {
+    // Previous attempt didn't reload — force it
+    window.location.reload();
+    return;
+  }
   applyUpdate();
 }
 
