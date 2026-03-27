@@ -170,6 +170,31 @@ function hideCheckinToast(): void {
   if (toast) toast.style.display = 'none';
 }
 
+// --- Legal pages ---
+
+function initLegalLinks(): void {
+  // Already initialized at module load — this is a no-op placeholder
+  // so the call in initUI doesn't break if we add future legal setup.
+}
+
+// Legal pages — initialized immediately so links work on auth screen too
+(function () {
+  const privacyPage = document.getElementById('privacyPage')!;
+  const tosPage = document.getElementById('tosPage')!;
+
+  document.addEventListener('click', (e) => {
+    const link = (e.target as HTMLElement).closest('[data-legal]') as HTMLElement | null;
+    if (!link) return;
+    e.preventDefault();
+    const page = link.dataset.legal === 'tos' ? tosPage : privacyPage;
+    page.style.display = 'block';
+    page.scrollTop = 0;
+  });
+
+  document.getElementById('privacyBack')!.addEventListener('click', () => { privacyPage.style.display = 'none'; });
+  document.getElementById('tosBack')!.addEventListener('click', () => { tosPage.style.display = 'none'; });
+})();
+
 // --- Init ---
 
 function initUI(): void {
@@ -212,6 +237,9 @@ function initUI(): void {
   initReminderEvents();
   initDeleteConfirmEvents();
   initCalendarUI();
+
+  // Legal page navigation
+  initLegalLinks();
 }
 
 let uiInitialized = false;

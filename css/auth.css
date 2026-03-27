@@ -145,6 +145,19 @@
   flex-shrink: 0;
 }
 
+/* Legal notice on auth screen */
+.auth-legal {
+  margin-top: 16px;
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.auth-legal .legal-link {
+  font-size: 0.72rem;
+}
+
 .sign-out-btn {
   padding: 5px 14px;
   border-radius: 16px;
