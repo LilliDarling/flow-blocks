@@ -127,14 +127,21 @@ function showReorderSuggestion(energy: number): void {
     </div>`;
   container.style.display = 'block';
 
+  // Capture IDs so the swap survives state.refresh() replacing block references
+  const nextId = nextBlock.id;
+  const betterId = betterBlock.id;
+  const nextStart = nextBlock.start;
+  const betterStart = betterBlock.start;
+
   $id('reorderAccept').addEventListener('click', async () => {
-    // Swap start times
-    const nextIdx = state.blocks.indexOf(nextBlock);
-    const betterIdx = state.blocks.indexOf(betterBlock);
+    // Look up blocks by ID — references may be stale after a refresh
+    const nextIdx = state.blocks.findIndex(b => b.id === nextId);
+    const betterIdx = state.blocks.findIndex(b => b.id === betterId);
     if (nextIdx >= 0 && betterIdx >= 0) {
-      const tempStart = nextBlock.start;
-      await state.updateBlock(nextIdx, { ...nextBlock, start: betterBlock.start });
-      await state.updateBlock(betterIdx, { ...betterBlock, start: tempStart });
+      const currNext = state.blocks[nextIdx];
+      const currBetter = state.blocks[betterIdx];
+      await state.updateBlock(nextIdx, { ...currNext, start: betterStart });
+      await state.updateBlock(betterIdx, { ...currBetter, start: nextStart });
       renderTimeline();
       renderWeek();
     }

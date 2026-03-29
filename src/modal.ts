@@ -252,15 +252,20 @@ function findOverlap(start: string, duration: number, days: number[], date: stri
   const newStart = toMinutes(start);
   const newEnd = newStart + duration;
 
+  const today = getTodayDate();
+
   for (let i = 0; i < state.blocks.length; i++) {
     if (i === state.editingIndex) continue;
     const b = state.blocks[i];
+
+    // Skip blocks dismissed for the relevant date
+    const checkDate = date || today;
+    if (state.getEffectiveStatus(b, checkDate) === 'dismissed') continue;
+
     const bStart = toMinutes(b.start);
     const bEnd = bStart + b.duration;
 
     if (newStart >= bEnd || newEnd <= bStart) continue;
-
-    const today = getTodayDate();
 
     // Time ranges overlap — check if they share any day
     if (date && b.date) {
