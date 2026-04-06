@@ -337,7 +337,7 @@ function renderTimeSuggestions(): void {
       <p class="reminder-suggestions-sub">Based on your last 7 days of activity</p>
     </div>
     ${suggestions.map(s => `
-      <div class="reminder-suggestion-card" data-suggestion-id="${s.reminderId}">
+      <div class="reminder-suggestion-card" data-suggestion-id="${esc(s.reminderId)}">
         <div class="suggestion-info">
           <span class="reminder-icon">${esc(s.reminderIcon)}</span>
           <div>
@@ -349,10 +349,10 @@ function renderTimeSuggestions(): void {
           </div>
         </div>
         <div class="suggestion-actions">
-          <button class="btn btn-primary suggestion-confirm-btn" data-confirm-id="${s.reminderId}" data-new-time="${s.suggestedTime}">
+          <button class="btn btn-primary suggestion-confirm-btn" data-confirm-id="${esc(s.reminderId)}" data-new-time="${esc(s.suggestedTime)}">
             Switch to ${fmtTime(s.suggestedTime)}
           </button>
-          <button class="btn btn-ghost suggestion-keep-btn" data-keep-id="${s.reminderId}">
+          <button class="btn btn-ghost suggestion-keep-btn" data-keep-id="${esc(s.reminderId)}">
             Keep as is
           </button>
         </div>

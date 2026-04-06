@@ -25,11 +25,11 @@ export function renderCalendarPanel(): void {
     connectionsEl.innerHTML = connections.map(c => `
       <div class="cal-connection${c._needsReconnect ? ' cal-connection--stale' : ''}">
         <div class="cal-connection-info">
-          <span class="cal-provider-badge">${c.provider}</span>
+          <span class="cal-provider-badge">${esc(c.provider)}</span>
           <span class="cal-connection-name">${esc(c.display_name)}</span>
           ${c._needsReconnect ? '<span class="cal-reconnect-badge">Reconnect needed</span>' : ''}
         </div>
-        <button class="cal-disconnect-btn" data-conn-id="${c.id}">Disconnect</button>
+        <button class="cal-disconnect-btn" data-conn-id="${esc(c.id)}">Disconnect</button>
       </div>
     `).join('');
 
@@ -49,7 +49,7 @@ export function renderCalendarPanel(): void {
   buttonsEl.innerHTML = providers.map(p => {
     const hasExisting = connections.some(c => c.provider === p.id);
     const label = hasExisting ? `+ Add another ${p.name} account` : `Connect ${p.name}`;
-    return `<button class="cal-provider-btn" data-provider="${p.id}">${label}</button>`;
+    return `<button class="cal-provider-btn" data-provider="${esc(p.id)}">${esc(label)}</button>`;
   }).join('');
 
   buttonsEl.querySelectorAll('.cal-provider-btn').forEach(btn => {

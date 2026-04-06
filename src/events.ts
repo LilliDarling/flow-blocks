@@ -202,6 +202,7 @@ let db: IDBDatabase | null = null;
 let syncTimer: ReturnType<typeof setInterval> | null = null;
 let draining = false;
 let pendingBuffer: QueuedEvent[] = [];
+let approxQueueSize = 0;
 
 function openEventDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -223,14 +224,11 @@ function enqueue(event: QueuedEvent): void {
     pendingBuffer.push(event);
     return;
   }
+  if (approxQueueSize >= MAX_QUEUE_SIZE) return;
   try {
     const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
-    const countReq = store.count();
-    countReq.onsuccess = () => {
-      if (countReq.result >= MAX_QUEUE_SIZE) return;
-      store.add(event);
-    };
+    tx.objectStore(STORE_NAME).add(event);
+    approxQueueSize++;
   } catch (e) {
     console.warn('[events] enqueue failed:', e);
   }
@@ -287,6 +285,7 @@ async function drainQueue(): Promise<void> {
       for (const event of events) {
         if (event.localId != null) store.delete(event.localId);
       }
+      approxQueueSize = Math.max(0, approxQueueSize - events.length);
     } else {
       console.warn('[events] sync failed, will retry:', error.message);
     }
@@ -348,6 +347,10 @@ export function emit<T extends EventType>(event: AppEvent<T>): void {
 export async function initEvents(): Promise<void> {
   try {
     db = await openEventDB();
+    // Sync approximate queue size from IDB
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const countReq = tx.objectStore(STORE_NAME).count();
+    countReq.onsuccess = () => { approxQueueSize = countReq.result; };
     // Flush any events emitted before IDB was ready
     flushPendingBuffer();
     // Drain any leftover events from prior sessions

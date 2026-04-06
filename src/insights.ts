@@ -56,20 +56,30 @@ async function loadInsightEvents(): Promise<EventRow[]> {
     return cachedEvents;
   }
 
-  const since = new Date();
-  since.setDate(since.getDate() - 30);
+  try {
+    const since = new Date();
+    since.setDate(since.getDate() - 30);
 
-  const { data } = await supabase
-    .from('events')
-    .select('id, type, entity_id, entity_type, payload, local_dow, local_hour, occurred_at')
-    .eq('user_id', state.userId)
-    .in('type', ['block.completed', 'block.skipped', 'block.expired', 'energy.logged'])
-    .gte('occurred_at', since.toISOString())
-    .order('occurred_at');
+    const { data, error } = await supabase
+      .from('events')
+      .select('id, type, entity_id, entity_type, payload, local_dow, local_hour, occurred_at')
+      .eq('user_id', state.userId)
+      .in('type', ['block.completed', 'block.skipped', 'block.expired', 'energy.logged'])
+      .gte('occurred_at', since.toISOString())
+      .order('occurred_at');
 
-  cachedEvents = (data || []) as EventRow[];
-  cacheTimestamp = Date.now();
-  return cachedEvents;
+    if (error) {
+      console.warn('[insights] failed to load events:', error.message);
+      return cachedEvents || [];
+    }
+
+    cachedEvents = (data || []) as EventRow[];
+    cacheTimestamp = Date.now();
+    return cachedEvents;
+  } catch (e) {
+    console.warn('[insights] load error:', e);
+    return cachedEvents || [];
+  }
 }
 
 /** Invalidate the cache so the next call fetches fresh data. */
@@ -287,9 +297,14 @@ async function writeKnowledgeEdges(insights: Insight[]): Promise<void> {
 
   if (rows.length === 0) return;
 
-  await supabase
-    .from('knowledge_edges')
-    .upsert(rows, { onConflict: 'user_id,source_node,target_node' });
+  try {
+    const { error } = await supabase
+      .from('knowledge_edges')
+      .upsert(rows, { onConflict: 'user_id,source_node,target_node' });
+    if (error) console.warn('[insights] edge write failed:', error.message);
+  } catch (e) {
+    console.warn('[insights] edge write error:', e);
+  }
 }
 
 function edgeFromInsight(insight: Insight): [string, string] {
@@ -350,8 +365,8 @@ export async function renderPatternInsights(): Promise<void> {
   const insights = computeAllInsights(events)
     .filter(i => !i.contextual && !dismissedInsights.has(i.id));
 
-  // Write edges in background
-  writeKnowledgeEdges(insights);
+  // Write edges in background (errors handled internally)
+  void writeKnowledgeEdges(insights);
 
   if (insights.length === 0) {
     container.innerHTML = '';
