@@ -1,22 +1,32 @@
 import { state } from './state.js';
-import { $id, EnergyLogRow } from './utils.js';
+import { $id, EnergyLogRow, valueToTier, EnergyTier } from './utils.js';
+
+const TIER_LABELS: Record<EnergyTier, string> = { low: 'Low', med: 'Med', high: 'High' };
+const TIER_HEIGHT: Record<EnergyTier, number> = { low: 30, med: 60, high: 95 };
 
 interface HourBucket {
   hour: number;
-  avg: number;
-  count: number;
+  dominant: EnergyTier;
+  counts: Record<EnergyTier, number>;
+  total: number;
 }
 
 function bucketByHour(logs: EnergyLogRow[]): HourBucket[] {
-  const sums: Record<number, { total: number; count: number }> = {};
+  const data: Record<number, Record<EnergyTier, number>> = {};
   for (const log of logs) {
     const h = new Date(log.logged_at).getHours();
-    if (!sums[h]) sums[h] = { total: 0, count: 0 };
-    sums[h].total += log.value;
-    sums[h].count++;
+    const tier = valueToTier(log.value);
+    if (!data[h]) data[h] = { low: 0, med: 0, high: 0 };
+    data[h][tier]++;
   }
-  return Object.entries(sums)
-    .map(([h, s]) => ({ hour: +h, avg: s.total / s.count, count: s.count }))
+  return Object.entries(data)
+    .map(([h, counts]) => {
+      const total = counts.low + counts.med + counts.high;
+      const dominant: EnergyTier =
+        counts.high >= counts.med && counts.high >= counts.low ? 'high' :
+        counts.med >= counts.low ? 'med' : 'low';
+      return { hour: +h, dominant, counts, total };
+    })
     .sort((a, b) => a.hour - b.hour);
 }
 
@@ -26,9 +36,9 @@ function fmtHour(h: number): string {
   return `${h12}${ampm}`;
 }
 
-function barColor(avg: number): string {
-  if (avg <= 3) return 'var(--danger)';
-  if (avg <= 6) return 'var(--steady)';
+function barColor(tier: EnergyTier): string {
+  if (tier === 'low') return 'var(--danger)';
+  if (tier === 'med') return 'var(--steady)';
   return 'var(--push)';
 }
 
@@ -47,30 +57,40 @@ export function renderEnergyAnalytics(): void {
   }
 
   const buckets = bucketByHour(logs);
-  const maxAvg = Math.max(...buckets.map(b => b.avg), 1);
 
   chart.innerHTML = `
     <div class="energy-bar-chart">
       ${buckets.map(b => {
-        const pct = (b.avg / 10) * 100;
+        const pct = TIER_HEIGHT[b.dominant];
         return `<div class="energy-bar-col">
-          <div class="energy-bar-value">${b.avg.toFixed(1)}</div>
-          <div class="energy-bar" style="height:${pct}%;background:${barColor(b.avg)}"></div>
+          <div class="energy-bar-value">${TIER_LABELS[b.dominant]}</div>
+          <div class="energy-bar" style="height:${pct}%;background:${barColor(b.dominant)}"></div>
           <div class="energy-bar-label">${fmtHour(b.hour)}</div>
         </div>`;
       }).join('')}
     </div>`;
 
   // Generate insights
-  const sorted = [...buckets].sort((a, b) => b.avg - a.avg);
-  const peak = sorted[0];
-  const low = sorted[sorted.length - 1];
-  const overall = logs.reduce((s, l) => s + l.value, 0) / logs.length;
+  const peakBuckets = buckets.filter(b => b.dominant === 'high');
+  const lowBuckets = buckets.filter(b => b.dominant === 'low');
+
+  // Overall dominant tier
+  const totals: Record<EnergyTier, number> = { low: 0, med: 0, high: 0 };
+  for (const log of logs) totals[valueToTier(log.value)]++;
+  const overallTier: EnergyTier =
+    totals.high >= totals.med && totals.high >= totals.low ? 'high' :
+    totals.med >= totals.low ? 'med' : 'low';
 
   const insightItems: string[] = [];
-  if (peak) insightItems.push(`Your peak energy tends to be around <strong>${fmtHour(peak.hour)}</strong> (avg ${peak.avg.toFixed(1)}) — great time for push or flow blocks.`);
-  if (low && low.hour !== peak.hour) insightItems.push(`Energy dips around <strong>${fmtHour(low.hour)}</strong> (avg ${low.avg.toFixed(1)}) — good slot for drift or rest.`);
-  insightItems.push(`Overall average: <strong>${overall.toFixed(1)}/10</strong> across ${logs.length} check-ins.`);
+  if (peakBuckets.length > 0) {
+    const times = peakBuckets.map(b => `<strong>${fmtHour(b.hour)}</strong>`).join(', ');
+    insightItems.push(`You tend to feel high energy around ${times} — great time for push or flow blocks.`);
+  }
+  if (lowBuckets.length > 0) {
+    const times = lowBuckets.map(b => `<strong>${fmtHour(b.hour)}</strong>`).join(', ');
+    insightItems.push(`Energy dips around ${times} — good slot for drift or rest.`);
+  }
+  insightItems.push(`Most common energy level: <strong>${TIER_LABELS[overallTier]}</strong> across ${logs.length} check-ins.`);
 
   insights.innerHTML = insightItems.map(i => `<div class="energy-insight">${i}</div>`).join('');
 }

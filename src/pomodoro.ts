@@ -1,6 +1,7 @@
 import { state } from './state.js';
 import { supabase } from './supabase.js';
 import { PomoMode, $id } from './utils.js';
+import { emit } from './events.js';
 
 const RING_CIRCUMFERENCE = 2 * Math.PI * 124;
 const POMO_MODES: PomoMode[] = ['focus', 'short', 'long'];
@@ -472,6 +473,14 @@ function skip(): void {
 function addDistraction(): void {
   distractionCount++;
   saveTimer();
+
+  // Emit distraction event with elapsed session time
+  const elapsed = state.pomo.totalSeconds - state.pomo.secondsLeft;
+  emit({
+    type: 'pomo.distraction_logged',
+    entity_type: 'pomo',
+    payload: { task: currentTask, session_elapsed_seconds: elapsed },
+  });
 
   // Brief visual feedback
   const btn = $id('pomoDistractionBtn');

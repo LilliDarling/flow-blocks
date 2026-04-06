@@ -137,17 +137,29 @@ async function markDone(idx: number): Promise<void> {
   const block = state.blocks[idx];
   const title = block.title || TYPE_LABELS[block.type] + ' block';
 
-  // Show a quick "when did you finish?" prompt
-  const completedAt = await askCompletionTime();
-  await state.updateBlockStatus(idx, 'done', completedAt ?? undefined);
-  await state.addDoneItem(title, completedAt ?? undefined);
+  // Show completion prompt (time + menu item selection)
+  const result = await askCompletionDetails(block);
+  if (!result) return; // cancelled
+
+  await state.updateBlockStatus(idx, 'done', result.completedAt ?? undefined, result.menuItemsDone);
+
+  // Done item text reflects what they actually did
+  const doneText = result.menuItemsDone.length > 0
+    ? result.menuItemsDone.join(', ')
+    : title;
+  await state.addDoneItem(doneText, result.completedAt ?? undefined, block.id);
   renderTimeline();
 }
 
-/** Quick inline prompt: "Just now" or pick an earlier time.
- *  Returns null for "just now" (lets DB default handle it),
- *  or a Date if the user picked an earlier time. */
-function askCompletionTime(): Promise<Date | null> {
+interface CompletionResult {
+  completedAt: Date | null;
+  menuItemsDone: string[];
+}
+
+/** Prompt: what did you do + when did you finish?
+ *  Shows menu items as checkboxes if the block has any.
+ *  Returns null if the user cancels. */
+function askCompletionDetails(block: FlowBlock): Promise<CompletionResult | null> {
   return new Promise((resolve) => {
     const now = new Date();
     const container = document.createElement('div');
@@ -156,9 +168,21 @@ function askCompletionTime(): Promise<Date | null> {
     const nowH = now.getHours().toString().padStart(2, '0');
     const nowM = now.getMinutes().toString().padStart(2, '0');
 
+    const menuHtml = block.menu.length > 0
+      ? `<div class="completion-menu-items">
+          <p>What did you do?</p>
+          ${block.menu.map((item, i) =>
+            `<label class="completion-menu-option">
+              <input type="checkbox" value="${i}"> ${item}
+            </label>`
+          ).join('')}
+        </div>`
+      : '';
+
     container.innerHTML = `
       <div class="completion-time-inner">
-        <p>When did you finish this?</p>
+        ${menuHtml}
+        <p>When did you finish?</p>
         <div class="completion-time-options">
           <button class="btn btn-primary completion-now-btn">Just now</button>
           <div class="completion-earlier">
@@ -167,15 +191,22 @@ function askCompletionTime(): Promise<Date | null> {
             <button class="btn btn-ghost completion-earlier-btn">Set</button>
           </div>
         </div>
+        <button class="btn btn-ghost completion-cancel-btn">Cancel</button>
       </div>`;
 
     document.body.appendChild(container);
 
     const cleanup = () => container.remove();
 
+    const getSelectedItems = (): string[] => {
+      const checked = container.querySelectorAll<HTMLInputElement>('.completion-menu-option input:checked');
+      return Array.from(checked).map(cb => block.menu[parseInt(cb.value)]);
+    };
+
     container.querySelector('.completion-now-btn')!.addEventListener('click', () => {
+      const items = getSelectedItems();
       cleanup();
-      resolve(null);
+      resolve({ completedAt: null, menuItemsDone: items });
     });
 
     container.querySelector('.completion-earlier-btn')!.addEventListener('click', () => {
@@ -184,11 +215,17 @@ function askCompletionTime(): Promise<Date | null> {
       const earlier = new Date();
       earlier.setHours(h, m, 0, 0);
       if (earlier > now) earlier.setTime(now.getTime());
+      const items = getSelectedItems();
       cleanup();
-      resolve(earlier);
+      resolve({ completedAt: earlier, menuItemsDone: items });
     });
 
-    // Clicking outside dismisses and defaults to "just now"
+    container.querySelector('.completion-cancel-btn')!.addEventListener('click', () => {
+      cleanup();
+      resolve(null);
+    });
+
+    // Clicking outside cancels
     container.addEventListener('click', (e) => {
       if (e.target === container) {
         cleanup();
@@ -218,7 +255,7 @@ async function deleteFromTimeline(idx: number): Promise<void> {
     await state.updateBlockStatus(idx, 'dismissed');
   } else {
     // 'future' or 'all' — delete the block template
-    await state.deleteBlock(idx);
+    await state.deleteBlock(idx, 'timeline');
   }
   renderTimeline();
 }

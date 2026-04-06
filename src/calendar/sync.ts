@@ -216,7 +216,7 @@ async function applySync(choices: BufferChoice[], _conflicts: Conflict[]): Promi
     for (const r of reserved) {
       if (bStart < r.end && bEnd > r.start) {
         const newStart = fromMinutes(r.end);
-        await state.updateBlock(i, { ...block, start: newStart });
+        await state.updateBlock(i, { ...block, start: newStart }, 'calendar_sync');
         break;
       }
     }
@@ -238,7 +238,7 @@ async function applySync(choices: BufferChoice[], _conflicts: Conflict[]): Promi
         date: today,
         status: 'pending',
         linked_event_id: choice.event.id,
-      });
+      }, 'calendar_sync');
     }
     if (choice.after > 0) {
       await state.addBlock({
@@ -251,7 +251,7 @@ async function applySync(choices: BufferChoice[], _conflicts: Conflict[]): Promi
         date: today,
         status: 'pending',
         linked_event_id: choice.event.id,
-      });
+      }, 'calendar_sync');
     }
   }
 }

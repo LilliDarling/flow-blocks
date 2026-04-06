@@ -18,6 +18,7 @@ import { renderReminders, initReminderEvents, scheduleReminders } from './routin
 import { initDeleteConfirmEvents } from './confirm-delete.js';
 import { initPWA } from './pwa.js';
 import { subscribeToPush } from './push.js';
+import { initEvents, emit, startSyncLoop, stopSyncLoop } from './events.js';
 
 type TabName = 'day' | 'week' | 'routines' | 'pomo' | 'energy' | 'tips';
 const TAB_ORDER: TabName[] = ['day', 'week', 'routines', 'pomo', 'energy', 'tips'];
@@ -140,8 +141,8 @@ function showReorderSuggestion(energy: number): void {
     if (nextIdx >= 0 && betterIdx >= 0) {
       const currNext = state.blocks[nextIdx];
       const currBetter = state.blocks[betterIdx];
-      await state.updateBlock(nextIdx, { ...currNext, start: betterStart });
-      await state.updateBlock(betterIdx, { ...currBetter, start: nextStart });
+      await state.updateBlock(nextIdx, { ...currNext, start: betterStart }, 'reorder_suggestion');
+      await state.updateBlock(betterIdx, { ...currBetter, start: nextStart }, 'reorder_suggestion');
       renderTimeline();
       renderWeek();
     }
@@ -275,6 +276,10 @@ async function onUserSignedIn(userId: string): Promise<void> {
   // Load all data while splash screen is still visible
   await state.load(userId);
 
+  // Initialize event system (IDB queue + sync loop)
+  await initEvents();
+  emit({ type: 'app.session_started', entity_type: null, payload: {} });
+
   // Restore energy tier from last logged value
   const tier = valueToTier(state.energy);
 
@@ -326,10 +331,27 @@ async function onUserSignedIn(userId: string): Promise<void> {
   }
 }
 
+// Track when app goes hidden for away-duration calculation
+let lastHiddenAt = 0;
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    lastHiddenAt = Date.now();
+    stopSyncLoop();
+  }
+});
+
 // Re-sync all state when app regains focus (handles cross-tab / cross-device)
 document.addEventListener('visibilitychange', async () => {
   if (document.visibilityState !== 'visible') return;
   if (!state.userId) return;
+
+  // Resume event sync and emit session resumed
+  startSyncLoop();
+  if (lastHiddenAt > 0) {
+    const awaySeconds = Math.round((Date.now() - lastHiddenAt) / 1000);
+    emit({ type: 'app.session_resumed', entity_type: null, payload: { away_duration_seconds: awaySeconds } });
+  }
 
   await state.refresh();
 
