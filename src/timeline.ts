@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { fmtTime, addMinutes, getTodayIndex, getTodayDate, TYPE_LABELS, BlockStatus, ENERGY_FIT, FlowBlock, $id } from './utils.js';
+import { fmtTime, addMinutes, getTodayIndex, getTodayDate, TYPE_LABELS, BlockStatus, ENERGY_FIT, FlowBlock, $id, esc } from './utils.js';
 import { openModal } from './modal.js';
 import { confirmDelete } from './confirm-delete.js';
 import type { CalendarEvent } from './calendar/types.js';
@@ -64,7 +64,7 @@ export function renderTimeline(): void {
 function renderFlowBlock(block: FlowBlock, realIndex: number, today: string): string {
   const endTime = addMinutes(block.start, block.duration);
   const menuHtml = block.menu.length
-    ? block.menu.map(m => `<span>${m}</span>`).join('')
+    ? block.menu.map(m => `<span>${esc(m)}</span>`).join('')
     : '';
   const effectiveStatus: BlockStatus = state.getEffectiveStatus(block, today);
   const statusClass =
@@ -83,7 +83,7 @@ function renderFlowBlock(block: FlowBlock, realIndex: number, today: string): st
         <span class="block-type-badge">${TYPE_LABELS[block.type]}</span>
         <span class="block-duration">${block.duration} min · until ${fmtTime(endTime)}</span>
       </div>
-      <div class="block-title">${block.title || 'Untitled block'}</div>
+      <div class="block-title">${esc(block.title || 'Untitled block')}</div>
       ${menuHtml ? `<div class="block-menu-items">${menuHtml}</div>` : ''}
       <div class="block-actions">
         <button class="block-action-btn done-btn" data-action="done" data-index="${realIndex}">Done</button>
@@ -113,7 +113,7 @@ function renderCalendarEvent(event: CalendarEvent): string {
         <span class="block-type-badge">${event.provider}</span>
         <span class="block-duration">${event.duration} min · until ${fmtTime(event.end)}</span>
       </div>
-      <div class="block-title">${event.title}</div>
+      <div class="block-title">${esc(event.title)}</div>
       <div class="cal-source-label">from ${event.provider} calendar</div>
     </div>
   </div>`;
@@ -127,7 +127,7 @@ function renderDoneList(): void {
   }
   section.style.display = 'block';
   $id('doneList').innerHTML = state.doneItems.map(d =>
-    `<div class="done-item">✓ ${d.text} <span style="float:right;opacity:0.5">${d.time}</span></div>`
+    `<div class="done-item">✓ ${esc(d.text)} <span style="float:right;opacity:0.5">${esc(d.time)}</span></div>`
   ).join('');
   $id('doneCount').textContent =
     `${state.doneItems.length} thing${state.doneItems.length !== 1 ? 's' : ''} accomplished`;
@@ -173,7 +173,7 @@ function askCompletionDetails(block: FlowBlock): Promise<CompletionResult | null
           <p>What did you do?</p>
           ${block.menu.map((item, i) =>
             `<label class="completion-menu-option">
-              <input type="checkbox" value="${i}"> ${item}
+              <input type="checkbox" value="${i}"> ${esc(item)}
             </label>`
           ).join('')}
         </div>`

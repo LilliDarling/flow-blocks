@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { DAYS, Reminder, ReminderTimeSuggestion, fmtTime, getTodayIndex, getTodayDate, $id } from './utils.js';
+import { DAYS, Reminder, ReminderTimeSuggestion, fmtTime, getTodayIndex, getTodayDate, $id, esc } from './utils.js';
 import { confirmDelete } from './confirm-delete.js';
 import { requestNotificationPermission, subscribeToPush } from './push.js';
 
@@ -39,9 +39,9 @@ export function renderReminders(): void {
         const cssClass = skipped ? 'reminder-skipped' : done ? 'reminder-done' : '';
         return `<div class="reminder-item ${cssClass}" data-reminder-idx="${realIndex}">
           <button class="reminder-check" data-reminder-toggle="${realIndex}">${done ? '✓' : ''}</button>
-          <span class="reminder-icon">${r.icon || '💊'}</span>
+          <span class="reminder-icon">${esc(r.icon || '💊')}</span>
           <div class="reminder-info">
-            <span class="reminder-name">${r.name}</span>
+            <span class="reminder-name">${esc(r.name)}</span>
             <span class="reminder-time">${fmtTime(r.time)}</span>
           </div>
           <button class="reminder-skip-btn" data-reminder-skip="${realIndex}">${skipped ? 'Undo' : 'Skip'}</button>
@@ -339,9 +339,9 @@ function renderTimeSuggestions(): void {
     ${suggestions.map(s => `
       <div class="reminder-suggestion-card" data-suggestion-id="${s.reminderId}">
         <div class="suggestion-info">
-          <span class="reminder-icon">${s.reminderIcon}</span>
+          <span class="reminder-icon">${esc(s.reminderIcon)}</span>
           <div>
-            <span class="suggestion-name">${s.reminderName}</span>
+            <span class="suggestion-name">${esc(s.reminderName)}</span>
             <span class="suggestion-detail">
               Scheduled at <strong>${fmtTime(s.scheduledTime)}</strong> — you usually complete it around <strong>${fmtTime(s.avgCompletionTime)}</strong>
             </span>
@@ -385,9 +385,9 @@ function renderManageList(): void {
   }
   el.innerHTML = state.reminders.map((r, i) =>
     `<div class="reminder-manage-item">
-      <span class="reminder-icon">${r.icon || '💊'}</span>
+      <span class="reminder-icon">${esc(r.icon || '💊')}</span>
       <div class="reminder-info">
-        <span class="reminder-name">${r.name}</span>
+        <span class="reminder-name">${esc(r.name)}</span>
         <span class="reminder-time">${fmtTime(r.time)} · ${r.days.map(d => DAYS[d]).join(', ')}</span>
       </div>
       <button class="reminder-edit-btn" data-manage-edit="${i}">Edit</button>

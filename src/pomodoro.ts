@@ -1,6 +1,6 @@
 import { state } from './state.js';
 import { supabase } from './supabase.js';
-import { PomoMode, $id } from './utils.js';
+import { PomoMode, $id, esc } from './utils.js';
 import { emit } from './events.js';
 
 const RING_CIRCUMFERENCE = 2 * Math.PI * 124;
@@ -326,9 +326,8 @@ function renderSessionLog(): void {
   section.style.display = '';
   list.innerHTML = sessions.map(s => {
     const time = new Date(s.completed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const escaped = s.task.replace(/</g, '&lt;').replace(/>/g, '&gt;');
     return `<div class="pomo-session-entry">
-      <span class="pomo-session-task">${escaped}</span>
+      <span class="pomo-session-task">${esc(s.task)}</span>
       <span class="pomo-session-meta">${s.duration}m${s.distractions > 0 ? ` · ${s.distractions} distraction${s.distractions !== 1 ? 's' : ''}` : ''} · ${time}</span>
     </div>`;
   }).join('');

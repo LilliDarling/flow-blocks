@@ -19,6 +19,8 @@ CREATE TABLE events (
   entity_id     uuid,
   entity_type   text,
   payload       jsonb NOT NULL DEFAULT '{}',
+  local_dow     smallint,              -- 0=Sun..6=Sat, set by client in user's local timezone
+  local_hour    smallint,              -- 0-23, set by client in user's local timezone
   occurred_at   timestamptz NOT NULL DEFAULT now(),
   created_at    timestamptz NOT NULL DEFAULT now()
 );
@@ -34,8 +36,13 @@ CREATE INDEX idx_events_entity ON events (entity_id, occurred_at)
   WHERE entity_id IS NOT NULL;
 
 -- Day-of-week pattern queries: "does user skip push blocks on Wednesdays?"
--- Cast to date first (immutable for timestamptz → date at UTC) so EXTRACT is allowed in an index.
-CREATE INDEX idx_events_dow ON events (user_id, type, (EXTRACT(DOW FROM occurred_at AT TIME ZONE 'UTC')));
+-- Uses client-set local_dow to avoid UTC/local timezone mismatch.
+CREATE INDEX idx_events_dow ON events (user_id, type, local_dow)
+  WHERE local_dow IS NOT NULL;
+
+-- Hour-of-day pattern queries: "energy dips in the afternoon"
+CREATE INDEX idx_events_hour ON events (user_id, type, local_hour)
+  WHERE local_hour IS NOT NULL;
 
 -- ============================================================
 -- 2. KNOWLEDGE EDGES TABLE
@@ -74,6 +81,11 @@ CREATE POLICY "Users can insert own events"
   ON events FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
+-- Events are immutable from the client — only server-side cleanup can delete
+CREATE POLICY "Events are immutable"
+  ON events FOR DELETE
+  USING (false);
+
 -- Knowledge edges: SELECT + INSERT + UPDATE (weights change)
 ALTER TABLE knowledge_edges ENABLE ROW LEVEL SECURITY;
 
@@ -89,6 +101,10 @@ CREATE POLICY "Users can update own edges"
   ON knowledge_edges FOR UPDATE
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Knowledge edges are immutable from client"
+  ON knowledge_edges FOR DELETE
+  USING (false);
 
 -- ============================================================
 -- 4. EXTEND DATA RETENTION

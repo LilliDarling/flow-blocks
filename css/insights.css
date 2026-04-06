@@ -1,0 +1,80 @@
+#dayInsights {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#dayInsights:empty {
+  display: none;
+}
+
+.insight-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  border: 1px solid var(--border);
+}
+
+.insight-positive {
+  background: color-mix(in srgb, var(--push) 8%, var(--surface));
+  border-color: color-mix(in srgb, var(--push) 20%, var(--border));
+}
+
+.insight-nudge {
+  background: color-mix(in srgb, var(--steady) 8%, var(--surface));
+  border-color: color-mix(in srgb, var(--steady) 20%, var(--border));
+}
+
+.insight-pattern {
+  background: var(--surface);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.insight-text {
+  flex: 1;
+}
+
+.insight-evidence {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.insight-dismiss {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+
+.insight-dismiss:hover {
+  opacity: 1;
+}
+
+.pattern-insights-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-top: 24px;
+  margin-bottom: 12px;
+}
+
+#patternInsights {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#patternInsights:empty {
+  display: none;
+}

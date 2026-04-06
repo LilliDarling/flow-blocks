@@ -3,7 +3,7 @@ import { state } from './state.js';
 import {
   $id, EnergyTier, ENERGY_TIER_VALUE, ENERGY_FIT,
   energySuggestion, valueToTier, fmtTime, addMinutes, getTodayIndex, getTodayDate,
-  FlowBlock, TYPE_LABELS,
+  FlowBlock, TYPE_LABELS, esc,
 } from './utils.js';
 import { renderTimeline, initTimelineEvents } from './timeline.js';
 import { renderWeek, initWeekEvents } from './week.js';
@@ -19,6 +19,7 @@ import { initDeleteConfirmEvents } from './confirm-delete.js';
 import { initPWA } from './pwa.js';
 import { subscribeToPush } from './push.js';
 import { initEvents, emit, startSyncLoop, stopSyncLoop } from './events.js';
+import { renderDayInsights, renderPatternInsights, initInsightEvents, invalidateInsightCache } from './insights.js';
 
 type TabName = 'day' | 'week' | 'routines' | 'pomo' | 'energy' | 'tips';
 const TAB_ORDER: TabName[] = ['day', 'week', 'routines', 'pomo', 'energy', 'tips'];
@@ -38,7 +39,7 @@ function switchTab(tab: TabName): void {
   if (tab === 'day') renderTimeline();
   if (tab === 'week') renderWeek();
   if (tab === 'routines') renderReminders();
-  if (tab === 'energy') renderEnergyAnalytics();
+  if (tab === 'energy') { renderEnergyAnalytics(); renderPatternInsights(); }
 }
 
 // --- Energy tier UI ---
@@ -59,6 +60,7 @@ function setEnergyTier(tier: EnergyTier, log = true): void {
 
   // Re-render timeline so block highlights update
   renderTimeline();
+  renderDayInsights();
 
   if (log) {
     state.logEnergy(value);
@@ -119,8 +121,8 @@ function showReorderSuggestion(energy: number): void {
   container.innerHTML = `
     <div class="reorder-suggestion-text">
       Your energy is ${valueToTier(energy)} right now.
-      <strong>${betterLabel}</strong> (${fmtTime(betterBlock.start)}) might be a better fit —
-      swap it with <strong>${nextLabel}</strong> (${fmtTime(nextBlock.start)})?
+      <strong>${esc(betterLabel)}</strong> (${fmtTime(betterBlock.start)}) might be a better fit —
+      swap it with <strong>${esc(nextLabel)}</strong> (${fmtTime(nextBlock.start)})?
     </div>
     <div class="reorder-suggestion-actions">
       <button class="btn btn-primary" id="reorderAccept">Swap them</button>
@@ -265,6 +267,7 @@ function initUI(): void {
   initReminderEvents();
   initDeleteConfirmEvents();
   initCalendarUI();
+  initInsightEvents();
 
   // Legal page navigation
   initLegalLinks();
@@ -311,6 +314,7 @@ async function onUserSignedIn(userId: string): Promise<void> {
   renderTimeline();
   renderReminders();
   scheduleReminders();
+  renderDayInsights();
 
   // Data is loaded — now reveal the app (hides splash)
   showApp();
@@ -376,6 +380,8 @@ document.addEventListener('visibilitychange', async () => {
   // Re-render the active view
   renderTimeline();
   renderReminders();
+  invalidateInsightCache();
+  renderDayInsights();
 });
 
 // Listen for messages from service worker (notification clicks while app is open)

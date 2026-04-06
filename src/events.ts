@@ -181,6 +181,8 @@ interface QueuedEvent {
   entity_id: string | null;
   entity_type: string | null;
   payload: Record<string, unknown>;
+  local_dow: number;
+  local_hour: number;
   occurred_at: string;
 }
 
@@ -193,10 +195,13 @@ const DB_VERSION = 1;
 const STORE_NAME = 'queue';
 const SYNC_INTERVAL_MS = 30_000;
 const BATCH_SIZE = 20;
+const MAX_PENDING = 1000;
+const MAX_QUEUE_SIZE = 5000;
 
 let db: IDBDatabase | null = null;
 let syncTimer: ReturnType<typeof setInterval> | null = null;
 let draining = false;
+let pendingBuffer: QueuedEvent[] = [];
 
 function openEventDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -213,17 +218,37 @@ function openEventDB(): Promise<IDBDatabase> {
 }
 
 function enqueue(event: QueuedEvent): void {
-  if (!db) return;
+  if (!db) {
+    if (pendingBuffer.length >= MAX_PENDING) return;
+    pendingBuffer.push(event);
+    return;
+  }
   try {
     const tx = db.transaction(STORE_NAME, 'readwrite');
-    tx.objectStore(STORE_NAME).add(event);
+    const store = tx.objectStore(STORE_NAME);
+    const countReq = store.count();
+    countReq.onsuccess = () => {
+      if (countReq.result >= MAX_QUEUE_SIZE) return;
+      store.add(event);
+    };
   } catch (e) {
     console.warn('[events] enqueue failed:', e);
   }
 }
 
+/** Flush any events that were buffered before IDB was ready. */
+function flushPendingBuffer(): void {
+  if (!db || pendingBuffer.length === 0) return;
+  const buffered = pendingBuffer;
+  pendingBuffer = [];
+  for (const event of buffered) {
+    enqueue(event);
+  }
+}
+
 async function drainQueue(): Promise<void> {
   if (draining || !db || !state.userId) return;
+  if (!navigator.onLine) return;
   draining = true;
 
   try {
@@ -248,6 +273,8 @@ async function drainQueue(): Promise<void> {
       entity_id: e.entity_id,
       entity_type: e.entity_type,
       payload: e.payload,
+      local_dow: e.local_dow,
+      local_hour: e.local_hour,
       occurred_at: e.occurred_at,
     }));
 
@@ -299,13 +326,16 @@ export function emit<T extends EventType>(event: AppEvent<T>): void {
     device: getDeviceContext(),
   };
 
+  const now = new Date();
   const queued: QueuedEvent = {
     user_id: state.userId,
     type: event.type,
     entity_id: event.entity_id || null,
     entity_type: event.entity_type || null,
     payload: enrichedPayload,
-    occurred_at: event.occurred_at || new Date().toISOString(),
+    local_dow: now.getDay(),      // 0=Sun..6=Sat in user's local timezone
+    local_hour: now.getHours(),   // 0-23 in user's local timezone
+    occurred_at: event.occurred_at || now.toISOString(),
   };
 
   enqueue(queued);
@@ -318,6 +348,8 @@ export function emit<T extends EventType>(event: AppEvent<T>): void {
 export async function initEvents(): Promise<void> {
   try {
     db = await openEventDB();
+    // Flush any events emitted before IDB was ready
+    flushPendingBuffer();
     // Drain any leftover events from prior sessions
     drainQueue();
     // Start periodic sync loop

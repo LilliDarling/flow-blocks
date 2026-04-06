@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { DAYS, TYPE_LABELS, getTodayIndex, getTodayDate, getDateForDayIndex, FlowBlock, $id } from './utils.js';
+import { DAYS, TYPE_LABELS, getTodayIndex, getTodayDate, getDateForDayIndex, FlowBlock, $id, esc } from './utils.js';
 import { openModal, openModalForSlot } from './modal.js';
 import type { CalendarEvent } from './calendar/types.js';
 
@@ -123,11 +123,11 @@ export function renderWeek(): void {
 
       if (item.block) {
         html += `<div class="week-block type-${item.block.type}" data-block-index="${item.blockIdx}" style="top:${top}px;height:${height}px;left:${left}%;width:${width}%">
-          <div class="week-cell-label">${item.block.title || TYPE_LABELS[item.block.type]}</div>
+          <div class="week-cell-label">${esc(item.block.title || TYPE_LABELS[item.block.type])}</div>
         </div>`;
       } else if (item.calEvent) {
         html += `<div class="week-block calendar-event cal-color-${item.calColorIdx}" style="top:${top}px;height:${height}px;left:${left}%;width:${width}%">
-          <div class="week-cell-label">${item.calEvent.title}</div>
+          <div class="week-cell-label">${esc(item.calEvent.title)}</div>
         </div>`;
       }
     }

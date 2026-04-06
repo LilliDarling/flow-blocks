@@ -326,6 +326,16 @@ export function getDateForDayIndex(dayIdx: number): string {
   return `${y}-${m}-${day}`;
 }
 
+/** Escape HTML special characters to prevent XSS when interpolating into innerHTML. */
+export function esc(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export function $(selector: string): HTMLElement {
   return document.querySelector(selector) as HTMLElement;
 }
