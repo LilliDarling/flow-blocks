@@ -365,7 +365,7 @@ async function acceptTimeSuggestion(reminderId: string, newTime: string): Promis
   if (index < 0) return;
 
   const reminder = state.reminders[index];
-  await state.updateReminder(index, { ...reminder, time: newTime });
+  await state.updateReminder(index, { ...reminder, time: newTime }, 'time_suggestion');
   state.dismissedSuggestions.add(reminderId);
   renderReminders();
   scheduleReminders();

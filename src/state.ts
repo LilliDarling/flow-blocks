@@ -3,8 +3,9 @@ import {
   FlowBlock, DoneItem, PomoMode, PomoSettings, PomoSession, PomoSessionRow,
   BlockStatus, CompletionRow, EnergyLogRow,
   Reminder, ReminderRow, ReminderCompletionRow, ReminderTimeSuggestion, reminderFromRow,
-  blockFromRow, doneItemFromRow, getTodayDate, getDateForDayIndex,
+  blockFromRow, doneItemFromRow, getTodayDate, getDateForDayIndex, valueToTier,
 } from './utils.js';
+import { emit, diff, MutationSource, EventPayloads } from './events.js';
 import {
   CalendarEvent, CalendarConnection,
   loadConnections, fetchAllEvents, disconnectCalendar, checkOAuthRedirect,
@@ -202,7 +203,7 @@ class AppState {
 
   // --- Block CRUD ---
 
-  async addBlock(block: FlowBlock): Promise<void> {
+  async addBlock(block: FlowBlock, source: MutationSource = 'manual'): Promise<void> {
     const row: Record<string, unknown> = {
       user_id: this.userId,
       type: block.type,
@@ -224,13 +225,30 @@ class AppState {
 
     if (!error && data) {
       this.blocks.push(blockFromRow(data));
+      emit({
+        type: 'block.created',
+        entity_id: data.id,
+        entity_type: 'block',
+        payload: {
+          type: block.type, title: block.title, menu: block.menu,
+          start_time: block.start, duration: block.duration,
+          days: block.days, block_date: block.date,
+          linked_event_id: block.linked_event_id, source,
+        },
+      });
     }
     this.showSaveBanner();
   }
 
-  async updateBlock(index: number, block: FlowBlock): Promise<void> {
+  async updateBlock(index: number, block: FlowBlock, source: MutationSource = 'manual'): Promise<void> {
     const existing = this.blocks[index];
     if (!existing?.id) return;
+
+    const before = {
+      type: existing.type, title: existing.title, menu: existing.menu,
+      start: existing.start, duration: existing.duration,
+      days: existing.days, date: existing.date, status: existing.status,
+    };
 
     const { data, error } = await supabase
       .from('blocks')
@@ -250,15 +268,39 @@ class AppState {
 
     if (!error && data) {
       this.blocks[index] = blockFromRow(data);
+      const after = {
+        type: block.type, title: block.title, menu: block.menu,
+        start: block.start, duration: block.duration,
+        days: block.days, date: block.date, status: block.status,
+      };
+      const changes = diff(before as Record<string, unknown>, after as Record<string, unknown>);
+      if (Object.keys(changes).length > 0) {
+        emit({
+          type: 'block.updated',
+          entity_id: existing.id,
+          entity_type: 'block',
+          payload: { changes, source },
+        });
+      }
     }
     this.showSaveBanner();
   }
 
-  async deleteBlock(index: number): Promise<void> {
+  async deleteBlock(index: number, source: MutationSource = 'manual'): Promise<void> {
     const existing = this.blocks[index];
     if (!existing?.id) return;
 
     await supabase.from('blocks').delete().eq('id', existing.id);
+    emit({
+      type: 'block.deleted',
+      entity_id: existing.id,
+      entity_type: 'block',
+      payload: {
+        block_type: existing.type,
+        title: existing.title,
+        reason: source === 'calendar_reconcile' ? 'calendar_reconcile' : 'user',
+      },
+    });
     this.blocks.splice(index, 1);
     this.showSaveBanner();
   }
@@ -272,9 +314,10 @@ class AppState {
     return this.completions.get(key) || 'pending';
   }
 
-  async updateBlockStatus(index: number, status: BlockStatus, completedAt?: Date): Promise<void> {
+  async updateBlockStatus(index: number, status: BlockStatus, completedAt?: Date, menuItemsDone?: string[]): Promise<void> {
     const existing = this.blocks[index];
     if (!existing?.id) return;
+    const today = getTodayDate();
 
     if (existing.date) {
       // One-off block: update the block row directly (original behavior)
@@ -282,7 +325,6 @@ class AppState {
       this.blocks[index].status = status;
     } else {
       // Recurring block: upsert into block_completions for today
-      const today = getTodayDate();
       const row: Record<string, unknown> = {
         block_id: existing.id,
         completion_date: today,
@@ -294,6 +336,22 @@ class AppState {
         .upsert(row, { onConflict: 'block_id,completion_date' });
       this.completions.set(`${existing.id}_${today}`, status);
     }
+
+    // Emit status event
+    const eventType = status === 'done' ? 'block.completed'
+      : status === 'skipped' ? 'block.skipped' : 'block.dismissed';
+    const date = existing.date || today;
+    const payload: Record<string, unknown> = {
+      date, block_type: existing.type, title: existing.title,
+    };
+    if (status === 'done' && completedAt) payload.completed_at = completedAt.toISOString();
+    if (status === 'done' && menuItemsDone && menuItemsDone.length > 0) payload.menu_items_done = menuItemsDone;
+    emit({
+      type: eventType,
+      entity_id: existing.id,
+      entity_type: 'block',
+      payload: payload as EventPayloads[typeof eventType],
+    });
   }
 
   // --- Calendar ---
@@ -340,7 +398,7 @@ class AppState {
 
       if (!event) {
         // Event was deleted from calendar — remove the buffer
-        await this.deleteBlock(i);
+        await this.deleteBlock(i, 'calendar_reconcile');
         continue;
       }
 
@@ -353,7 +411,7 @@ class AppState {
         : fromMin(evEndMin);
 
       if (block.start !== expectedStart) {
-        await this.updateBlock(i, { ...block, start: expectedStart });
+        await this.updateBlock(i, { ...block, start: expectedStart }, 'calendar_reconcile');
       }
     }
   }
@@ -363,6 +421,12 @@ class AppState {
     const conn = await checkOAuthRedirect(this.userId);
     if (conn) {
       this.calendarConnections.push(conn);
+      emit({
+        type: 'calendar.connected',
+        entity_id: conn.id,
+        entity_type: null,
+        payload: { provider: conn.provider, display_name: conn.display_name },
+      });
       await this.loadCalendar();
       return true;
     }
@@ -370,8 +434,17 @@ class AppState {
   }
 
   async removeCalendarConnection(connectionId: string): Promise<void> {
+    const conn = this.calendarConnections.find(c => c.id === connectionId);
     await disconnectCalendar(connectionId);
     this.calendarConnections = this.calendarConnections.filter(c => c.id !== connectionId);
+    if (conn) {
+      emit({
+        type: 'calendar.disconnected',
+        entity_id: connectionId,
+        entity_type: null,
+        payload: { provider: conn.provider },
+      });
+    }
     // Re-fetch events without that connection
     const today = getTodayDate();
     this.calendarEvents = this.calendarConnections.length > 0
@@ -387,7 +460,14 @@ class AppState {
       .insert({ user_id: this.userId, value })
       .select()
       .single();
-    if (data) this.energyLogs.push(data as EnergyLogRow);
+    if (data) {
+      this.energyLogs.push(data as EnergyLogRow);
+      emit({
+        type: 'energy.logged',
+        entity_type: null,
+        payload: { value, tier: valueToTier(value) },
+      });
+    }
   }
 
   /** Fetch the most recent energy log to sync across tabs/devices. */
@@ -416,7 +496,7 @@ class AppState {
 
   // --- Done items ---
 
-  async addDoneItem(text: string, completedAt?: Date): Promise<void> {
+  async addDoneItem(text: string, completedAt?: Date, sourceBlockId?: string): Promise<void> {
     const time = (completedAt ?? new Date()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const { data } = await supabase
       .from('done_items')
@@ -426,6 +506,12 @@ class AppState {
 
     if (data) {
       this.doneItems.push(doneItemFromRow(data));
+      emit({
+        type: 'done_item.created',
+        entity_id: data.id,
+        entity_type: null,
+        payload: { text, time, ...(sourceBlockId && { source_block_id: sourceBlockId }) },
+      });
     }
   }
 
@@ -488,6 +574,12 @@ class AppState {
         completed_at: row.completed_at,
       };
       this.pomoSessions.push(entry);
+      emit({
+        type: 'pomo.session_completed',
+        entity_id: row.id,
+        entity_type: 'pomo',
+        payload: { task: session.task, duration: session.duration, distractions: session.distractions },
+      });
       return entry;
     }
     return null;
@@ -547,13 +639,21 @@ class AppState {
 
     if (!error && data) {
       this.reminders.push(reminderFromRow(data));
+      emit({
+        type: 'reminder.created',
+        entity_id: data.id,
+        entity_type: 'reminder',
+        payload: { name: reminder.name, time: reminder.time, days: reminder.days, icon: reminder.icon },
+      });
     }
     this.showSaveBanner();
   }
 
-  async updateReminder(index: number, reminder: Reminder): Promise<void> {
+  async updateReminder(index: number, reminder: Reminder, source: MutationSource = 'manual'): Promise<void> {
     const existing = this.reminders[index];
     if (!existing?.id) return;
+
+    const before = { name: existing.name, time: existing.time, days: existing.days, icon: existing.icon };
 
     const { data, error } = await supabase
       .from('reminders')
@@ -569,6 +669,16 @@ class AppState {
 
     if (!error && data) {
       this.reminders[index] = reminderFromRow(data);
+      const after = { name: reminder.name, time: reminder.time, days: reminder.days, icon: reminder.icon };
+      const changes = diff(before as Record<string, unknown>, after as Record<string, unknown>);
+      if (Object.keys(changes).length > 0) {
+        emit({
+          type: 'reminder.updated',
+          entity_id: existing.id,
+          entity_type: 'reminder',
+          payload: { changes, source },
+        });
+      }
     }
     this.showSaveBanner();
   }
@@ -578,6 +688,12 @@ class AppState {
     if (!existing?.id) return;
 
     await supabase.from('reminders').delete().eq('id', existing.id);
+    emit({
+      type: 'reminder.deleted',
+      entity_id: existing.id,
+      entity_type: 'reminder',
+      payload: {},
+    });
     this.reminders.splice(index, 1);
     this.showSaveBanner();
   }
@@ -598,12 +714,24 @@ class AppState {
         .eq('reminder_id', reminder.id)
         .eq('completion_date', today);
       this.reminderCompletions.delete(reminder.id);
+      emit({
+        type: 'reminder.uncompleted',
+        entity_id: reminder.id,
+        entity_type: 'reminder',
+        payload: { date: today, reminder_name: reminder.name },
+      });
     } else {
       // Complete
       await supabase
         .from('reminder_completions')
         .insert({ reminder_id: reminder.id, completion_date: today });
       this.reminderCompletions.add(reminder.id);
+      emit({
+        type: 'reminder.completed',
+        entity_id: reminder.id,
+        entity_type: 'reminder',
+        payload: { date: today, reminder_name: reminder.name },
+      });
     }
   }
 
@@ -622,11 +750,23 @@ class AppState {
         .eq('reminder_id', reminder.id)
         .eq('skip_date', today);
       this.reminderSkips.delete(reminder.id);
+      emit({
+        type: 'reminder.unskipped',
+        entity_id: reminder.id,
+        entity_type: 'reminder',
+        payload: { date: today, reminder_name: reminder.name },
+      });
     } else {
       await supabase
         .from('reminder_skips')
         .insert({ reminder_id: reminder.id, skip_date: today });
       this.reminderSkips.add(reminder.id);
+      emit({
+        type: 'reminder.skipped',
+        entity_id: reminder.id,
+        entity_type: 'reminder',
+        payload: { date: today, reminder_name: reminder.name },
+      });
     }
   }
 

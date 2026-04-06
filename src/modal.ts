@@ -334,9 +334,9 @@ async function saveBlock(): Promise<void> {
   };
 
   if (state.editingIndex >= 0) {
-    await state.updateBlock(state.editingIndex, block);
+    await state.updateBlock(state.editingIndex, block, 'modal');
   } else {
-    await state.addBlock(block);
+    await state.addBlock(block, 'modal');
   }
 
   closeModal();
@@ -359,7 +359,7 @@ async function deleteBlock(): Promise<void> {
   if (choice === 'this') {
     await state.updateBlockStatus(state.editingIndex, 'dismissed');
   } else {
-    await state.deleteBlock(state.editingIndex);
+    await state.deleteBlock(state.editingIndex, 'modal');
   }
 
   closeModal();

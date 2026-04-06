@@ -164,11 +164,11 @@ async function endDrag(): Promise<void> {
   if (targetIndex >= 0) {
     const targetBlock = state.blocks[targetIndex];
     // Swap: target gets the dragged block's old time, dragged gets target's time
-    await state.updateBlock(savedDragIndex, { ...draggedBlock, start: targetBlock.start });
-    await state.updateBlock(targetIndex, { ...targetBlock, start: originalStartTime });
+    await state.updateBlock(savedDragIndex, { ...draggedBlock, start: targetBlock.start }, 'drag');
+    await state.updateBlock(targetIndex, { ...targetBlock, start: originalStartTime }, 'drag');
   } else {
     // No overlap — just move to the new time
-    await state.updateBlock(savedDragIndex, { ...draggedBlock, start: newTime });
+    await state.updateBlock(savedDragIndex, { ...draggedBlock, start: newTime }, 'drag');
   }
 
   renderTimeline();

@@ -471,6 +471,32 @@
   margin-bottom: 16px;
 }
 
+.completion-menu-items {
+  text-align: left;
+  margin-bottom: 8px;
+}
+
+.completion-menu-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.completion-menu-option:hover {
+  background: var(--surface2);
+}
+
+.completion-menu-option input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+}
+
 .completion-time-options {
   display: flex;
   flex-direction: column;
@@ -479,6 +505,12 @@
 
 .completion-now-btn {
   width: 100%;
+}
+
+.completion-cancel-btn {
+  width: 100%;
+  margin-top: 8px;
+  opacity: 0.6;
 }
 
 .completion-earlier {
