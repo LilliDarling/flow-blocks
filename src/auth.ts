@@ -147,6 +147,10 @@ async function handleGoogleSignIn(): Promise<void> {
 
 async function handleSignOut(): Promise<void> {
   await supabase.auth.signOut();
+  // Hard reload clears all in-memory state, sessionStorage, and stops event sync.
+  // IDB is cleared separately before reload to prevent cross-user data leaks.
+  sessionStorage.clear();
+  window.location.reload();
 }
 
 // --- Init ---

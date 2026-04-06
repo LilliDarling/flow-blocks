@@ -108,11 +108,15 @@ export const BLOCK_TYPE_KEYWORDS: Record<string, BlockType> = {
   journal: 'growth', journaling: 'growth', therapy: 'growth', learn: 'growth',
   course: 'growth', meditate: 'growth', meditation: 'growth', reflect: 'growth',
   podcast: 'growth', book: 'growth', goals: 'growth', practice: 'growth',
+  // Steady — engaged but sustainable (continued)
+  project: 'steady', manage: 'steady', management: 'steady',
   // Drift — autopilot
   email: 'drift', emails: 'drift', invoice: 'drift', expense: 'drift', bill: 'drift',
   organize: 'drift', laundry: 'drift', dishes: 'drift', grocery: 'drift',
   groceries: 'drift', file: 'drift', paperwork: 'drift', tidy: 'drift',
   clean: 'drift', sort: 'drift', schedule: 'drift', appointment: 'drift',
+  vacuum: 'drift', mop: 'drift', sweep: 'drift', dust: 'drift', trash: 'drift',
+  feed: 'drift', water: 'drift', litter: 'drift',
   // Rest — restorative
   nap: 'rest', rest: 'rest', break: 'rest', walk: 'rest',
   stretch: 'rest', yoga: 'rest', relax: 'rest', breathe: 'rest',

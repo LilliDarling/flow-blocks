@@ -20,6 +20,7 @@ import { initPWA } from './pwa.js';
 import { subscribeToPush } from './push.js';
 import { initEvents, emit, startSyncLoop, stopSyncLoop } from './events.js';
 import { renderDayInsights, renderPatternInsights, initInsightEvents, invalidateInsightCache } from './insights.js';
+import { initQuickStart } from './quickstart.js';
 
 type TabName = 'day' | 'week' | 'routines' | 'pomo' | 'energy' | 'tips';
 const TAB_ORDER: TabName[] = ['day', 'week', 'routines', 'pomo', 'energy', 'tips'];
@@ -268,6 +269,7 @@ function initUI(): void {
   initDeleteConfirmEvents();
   initCalendarUI();
   initInsightEvents();
+  initQuickStart();
 
   // Legal page navigation
   initLegalLinks();
@@ -397,9 +399,13 @@ document.addEventListener('DOMContentLoaded', () => {
   initPWA();
   initAuth();
 
-  onAuth((userId) => {
+  onAuth(async (userId) => {
     if (userId) {
       onUserSignedIn(userId);
+    } else {
+      // User signed out — clear event queue to prevent cross-user data leaks
+      const { clearEventQueue } = await import('./events.js');
+      clearEventQueue();
     }
   });
 });

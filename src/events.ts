@@ -376,6 +376,21 @@ export function stopSyncLoop(): void {
   }
 }
 
+/** Clear the IDB event queue. Call on sign-out to prevent cross-user data leaks. */
+export async function clearEventQueue(): Promise<void> {
+  stopSyncLoop();
+  pendingBuffer = [];
+  approxQueueSize = 0;
+  if (db) {
+    try {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).clear();
+    } catch (e) {
+      console.warn('[events] clear failed:', e);
+    }
+  }
+}
+
 /** Compute a ChangeSet from two objects. Only includes fields that actually changed. */
 export function diff(before: Record<string, unknown>, after: Record<string, unknown>): ChangeSet {
   const changes: ChangeSet = {};
