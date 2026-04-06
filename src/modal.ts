@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { DAYS, BlockType, FlowBlock, fmtTime, addMinutes, $id, getTodayIndex, getTodayDate, getDateForDayIndex, TYPE_LABELS, TYPE_DESCRIPTIONS, BLOCK_TYPE_KEYWORDS, BLOCK_MENU_SUGGESTIONS } from './utils.js';
+import { DAYS, BlockType, FlowBlock, fmtTime, addMinutes, $id, getTodayIndex, getTodayDate, getDateForDayIndex, TYPE_LABELS, TYPE_DESCRIPTIONS, BLOCK_TYPE_KEYWORDS, BLOCK_MENU_SUGGESTIONS, esc } from './utils.js';
 import { renderTimeline } from './timeline.js';
 import { renderWeek } from './week.js';
 import { confirmDelete } from './confirm-delete.js';
@@ -187,7 +187,7 @@ function renderMenuSuggestions(type: BlockType): void {
   container.innerHTML =
     `<div class="menu-suggestions-label">Tap to add:</div>` +
     suggestions.map((s, i) =>
-      `<button type="button" class="menu-chip${i < pastCount ? ' menu-chip-personal' : ''}" data-menu-item="${s.replace(/"/g, '&quot;')}">${s}</button>`
+      `<button type="button" class="menu-chip${i < pastCount ? ' menu-chip-personal' : ''}" data-menu-item="${esc(s)}">${esc(s)}</button>`
     ).join('');
 }
 

@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { $id } from '../utils.js';
+import { $id, esc } from '../utils.js';
 import { getAllProviders } from './registry.js';
 import { renderTimeline } from '../timeline.js';
 
@@ -26,7 +26,7 @@ export function renderCalendarPanel(): void {
       <div class="cal-connection${c._needsReconnect ? ' cal-connection--stale' : ''}">
         <div class="cal-connection-info">
           <span class="cal-provider-badge">${c.provider}</span>
-          <span class="cal-connection-name">${c.display_name}</span>
+          <span class="cal-connection-name">${esc(c.display_name)}</span>
           ${c._needsReconnect ? '<span class="cal-reconnect-badge">Reconnect needed</span>' : ''}
         </div>
         <button class="cal-disconnect-btn" data-conn-id="${c.id}">Disconnect</button>

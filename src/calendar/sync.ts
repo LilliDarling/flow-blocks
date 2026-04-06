@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { $id, fmtTime, addMinutes, getTodayDate, getTodayIndex, FlowBlock } from '../utils.js';
+import { $id, fmtTime, addMinutes, getTodayDate, getTodayIndex, FlowBlock, esc } from '../utils.js';
 import { renderTimeline } from '../timeline.js';
 import type { CalendarEvent } from './types.js';
 
@@ -84,14 +84,14 @@ export function showCalendarSyncDialog(): void {
     const eventConflicts = conflicts.filter(c => c.event.id === event.id);
     const conflictHtml = eventConflicts.map(c =>
       `<div class="cal-sync-conflict">
-        <strong>"${c.block.title || c.block.type}"</strong> (${fmtTime(c.block.start)} – ${fmtTime(addMinutes(c.block.start, c.block.duration))})
+        <strong>"${esc(c.block.title || c.block.type)}"</strong> (${fmtTime(c.block.start)} – ${fmtTime(addMinutes(c.block.start, c.block.duration))})
         overlaps — will move to <strong>${fmtTime(c.newStart)}</strong>
       </div>`
     ).join('');
 
     return `<div class="cal-sync-item" data-event-idx="${idx}">
       <div class="cal-sync-event-header">
-        <span class="cal-sync-event-title">${event.title}</span>
+        <span class="cal-sync-event-title">${esc(event.title)}</span>
         <span class="cal-sync-event-time">${fmtTime(event.start)} – ${fmtTime(event.end)}</span>
       </div>
       <div class="cal-sync-buffers">

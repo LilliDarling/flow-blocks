@@ -5,7 +5,7 @@ import {
   Reminder, ReminderRow, ReminderCompletionRow, ReminderTimeSuggestion, reminderFromRow,
   blockFromRow, doneItemFromRow, getTodayDate, getDateForDayIndex, valueToTier,
 } from './utils.js';
-import { emit, diff, MutationSource, EventPayloads } from './events.js';
+import { emit, diff, MutationSource } from './events.js';
 import {
   CalendarEvent, CalendarConnection,
   loadConnections, fetchAllEvents, disconnectCalendar, checkOAuthRedirect,
@@ -338,20 +338,34 @@ class AppState {
     }
 
     // Emit status event
-    const eventType = status === 'done' ? 'block.completed'
-      : status === 'skipped' ? 'block.skipped' : 'block.dismissed';
     const date = existing.date || today;
-    const payload: Record<string, unknown> = {
-      date, block_type: existing.type, title: existing.title,
-    };
-    if (status === 'done' && completedAt) payload.completed_at = completedAt.toISOString();
-    if (status === 'done' && menuItemsDone && menuItemsDone.length > 0) payload.menu_items_done = menuItemsDone;
-    emit({
-      type: eventType,
-      entity_id: existing.id,
-      entity_type: 'block',
-      payload: payload as EventPayloads[typeof eventType],
-    });
+
+    if (status === 'done') {
+      emit({
+        type: 'block.completed',
+        entity_id: existing.id,
+        entity_type: 'block',
+        payload: {
+          date, block_type: existing.type, title: existing.title,
+          ...(completedAt ? { completed_at: completedAt.toISOString() } : {}),
+          ...(menuItemsDone && menuItemsDone.length > 0 ? { menu_items_done: menuItemsDone } : {}),
+        },
+      });
+    } else if (status === 'skipped') {
+      emit({
+        type: 'block.skipped',
+        entity_id: existing.id,
+        entity_type: 'block',
+        payload: { date, block_type: existing.type, title: existing.title },
+      });
+    } else {
+      emit({
+        type: 'block.dismissed',
+        entity_id: existing.id,
+        entity_type: 'block',
+        payload: { date, block_type: existing.type, title: existing.title },
+      });
+    }
   }
 
   // --- Calendar ---
