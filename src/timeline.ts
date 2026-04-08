@@ -53,15 +53,21 @@ export function renderTimeline(): void {
     return;
   }
 
+  // Build ordered list of flow block indices for swap navigation
+  const blockItems = items.filter((it): it is Extract<TimelineItem, { kind: 'block' }> => it.kind === 'block');
+
   tl.innerHTML = items.map(item => {
     if (item.kind === 'event') return renderCalendarEvent(item.event);
-    return renderFlowBlock(item.block, item.index, today);
+    const pos = blockItems.indexOf(item as typeof blockItems[number]);
+    const prevIdx = pos > 0 ? blockItems[pos - 1].index : -1;
+    const nextIdx = pos < blockItems.length - 1 ? blockItems[pos + 1].index : -1;
+    return renderFlowBlock(item.block, item.index, today, prevIdx, nextIdx);
   }).join('');
 
   renderDoneList();
 }
 
-function renderFlowBlock(block: FlowBlock, realIndex: number, today: string): string {
+function renderFlowBlock(block: FlowBlock, realIndex: number, today: string, prevIdx: number, nextIdx: number): string {
   const endTime = addMinutes(block.start, block.duration);
   const menuHtml = block.menu.length
     ? block.menu.map(m => `<span>${esc(m)}</span>`).join('')
@@ -75,6 +81,13 @@ function renderFlowBlock(block: FlowBlock, realIndex: number, today: string): st
   const energyClass = effectiveStatus !== 'pending' ? '' :
     (energy >= eMin && energy <= eMax) ? 'energy-match' : 'energy-dim';
 
+  const swapUp = prevIdx >= 0
+    ? `<button class="block-swap-btn" data-action="swap-up" data-index="${realIndex}" data-swap-target="${prevIdx}" title="Swap with block above">↑</button>`
+    : '';
+  const swapDown = nextIdx >= 0
+    ? `<button class="block-swap-btn" data-action="swap-down" data-index="${realIndex}" data-swap-target="${nextIdx}" title="Swap with block below">↓</button>`
+    : '';
+
   return `<div class="time-block">
     <div class="time-label">${fmtTime(block.start)}</div>
     <div class="dot"></div>
@@ -82,6 +95,7 @@ function renderFlowBlock(block: FlowBlock, realIndex: number, today: string): st
       <div class="block-top">
         <span class="block-type-badge">${TYPE_LABELS[block.type]}</span>
         <span class="block-duration">${block.duration} min · until ${fmtTime(endTime)}</span>
+        <span class="block-swap-buttons">${swapUp}${swapDown}</span>
       </div>
       <div class="block-title">${esc(block.title || 'Untitled block')}</div>
       ${menuHtml ? `<div class="block-menu-items">${menuHtml}</div>` : ''}
@@ -235,6 +249,17 @@ function askCompletionDetails(block: FlowBlock): Promise<CompletionResult | null
   });
 }
 
+async function swapBlocks(idxA: number, idxB: number): Promise<void> {
+  const blockA = state.blocks[idxA];
+  const blockB = state.blocks[idxB];
+  if (!blockA || !blockB) return;
+  const startA = blockA.start;
+  const startB = blockB.start;
+  await state.updateBlock(idxA, { ...blockA, start: startB }, 'drag');
+  await state.updateBlock(idxB, { ...blockB, start: startA }, 'drag');
+  renderTimeline();
+}
+
 async function markSkip(idx: number): Promise<void> {
   await state.updateBlockStatus(idx, 'skipped');
   renderTimeline();
@@ -272,6 +297,7 @@ export function initTimelineEvents(): void {
       else if (action === 'skip') markSkip(idx);
       else if (action === 'edit') openModal(idx);
       else if (action === 'delete') deleteFromTimeline(idx);
+      else if (action === 'swap-up' || action === 'swap-down') swapBlocks(idx, parseInt(actionBtn.dataset.swapTarget!));
       return;
     }
   });
