@@ -49,6 +49,15 @@
 .light .energy-btn.energy-med.active  { background: rgba(196, 136, 74, 0.15); border-color: #c4884a; color: #c4884a; }
 .light .energy-btn.energy-high.active { background: rgba(45, 106, 79, 0.15); border-color: #2d6a4f; color: #2d6a4f; }
 
+.energy-btn.energy-confirmed {
+  animation: energy-pulse 0.4s ease-out;
+}
+@keyframes energy-pulse {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
 .energy-suggestion {
   max-width: 700px;
   margin: 0 auto 14px;

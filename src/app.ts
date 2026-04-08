@@ -49,9 +49,17 @@ function setEnergyTier(tier: EnergyTier, log = true): void {
   const value = ENERGY_TIER_VALUE[tier];
   state.energy = value;
 
-  // Highlight active button
+  // Highlight active button (clear first so re-selecting the same tier is visible)
   document.querySelectorAll<HTMLElement>('.energy-check .energy-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.energy === tier);
+    btn.classList.remove('active', 'energy-confirmed');
+  });
+  // Force reflow so removing + re-adding classes triggers animation
+  void ($id('energyButtons') as HTMLElement).offsetWidth;
+  document.querySelectorAll<HTMLElement>('.energy-check .energy-btn').forEach(btn => {
+    if (btn.dataset.energy === tier) {
+      btn.classList.add('active');
+      if (log) btn.classList.add('energy-confirmed');
+    }
   });
 
   // Update suggestion banner
@@ -294,6 +302,11 @@ async function onUserSignedIn(userId: string): Promise<void> {
   }
 
   setEnergyTier(tier, false);
+
+  // Clear button highlight so re-selecting the same level gives visual feedback
+  document.querySelectorAll<HTMLElement>('.energy-check .energy-btn').forEach(btn => {
+    btn.classList.remove('active');
+  });
 
   // Determine last energy log time for check-in scheduling
   if (state.energyLogs.length > 0) {
