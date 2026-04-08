@@ -200,6 +200,23 @@
   display: none !important;
 }
 
+.cal-event-actions {
+  display: none;
+  margin-top: 8px;
+}
+
+.block-card.calendar-event:hover .cal-event-actions { display: flex; }
+
+.cal-hide-btn {
+  opacity: 0.7;
+}
+
+.cal-hide-btn:hover {
+  opacity: 1;
+  border-color: var(--text-dim);
+  color: var(--text);
+}
+
 .cal-source-label {
   font-size: 0.65rem;
   color: var(--text-dim);

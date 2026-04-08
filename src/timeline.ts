@@ -26,9 +26,9 @@ export function renderTimeline(): void {
     })
     .map(b => ({ kind: 'block' as const, block: b, index: state.blocks.indexOf(b) }));
 
-  // Gather calendar events (skip all-day events from the main timeline)
+  // Gather calendar events (skip all-day and hidden events from the main timeline)
   const calEvents: TimelineItem[] = state.calendarEvents
-    .filter(e => !e.allDay)
+    .filter(e => !e.allDay && !state.hiddenCalendarEventIds.has(e.id))
     .map(e => ({ kind: 'event' as const, event: e }));
 
   // Merge and sort by start time; buffer blocks sort before other blocks at the same time
@@ -122,13 +122,16 @@ function renderCalendarEvent(event: CalendarEvent): string {
   return `<div class="time-block">
     <div class="time-label">${fmtTime(event.start)}</div>
     <div class="dot"></div>
-    <div class="block-card calendar-event ${color}">
+    <div class="block-card calendar-event ${color}" data-cal-id="${esc(event.id)}">
       <div class="block-top">
         <span class="block-type-badge">${event.provider}</span>
         <span class="block-duration">${event.duration} min · until ${fmtTime(event.end)}</span>
       </div>
       <div class="block-title">${esc(event.title)}</div>
       <div class="cal-source-label">from ${event.provider} calendar</div>
+      <div class="cal-event-actions">
+        <button class="block-action-btn cal-hide-btn" data-action="hide-event" data-cal-id="${esc(event.id)}">Hide from today</button>
+      </div>
     </div>
   </div>`;
 }
@@ -293,7 +296,10 @@ export function initTimelineEvents(): void {
       e.stopPropagation();
       const idx = parseInt(actionBtn.dataset.index!);
       const action = actionBtn.dataset.action;
-      if (action === 'done') markDone(idx);
+      if (action === 'hide-event') {
+        const calId = actionBtn.dataset.calId;
+        if (calId) { state.hideCalendarEvent(calId); renderTimeline(); }
+      } else if (action === 'done') markDone(idx);
       else if (action === 'skip') markSkip(idx);
       else if (action === 'edit') openModal(idx);
       else if (action === 'delete') deleteFromTimeline(idx);

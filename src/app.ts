@@ -25,9 +25,8 @@ import { initQuickStart } from './quickstart.js';
 type TabName = 'day' | 'week' | 'routines' | 'pomo' | 'energy' | 'tips';
 const TAB_ORDER: TabName[] = ['day', 'week', 'routines', 'pomo', 'energy', 'tips'];
 
-// --- Energy check-in timer ---
-const CHECKIN_INTERVAL_MS = 2 * 60 * 60 * 1000; // 2 hours
-let checkinTimer: ReturnType<typeof setTimeout> | null = null;
+// --- Energy check-in (gentle return nudge) ---
+const RETURN_NUDGE_MS = 3 * 60 * 60 * 1000; // 3 hours away before nudging
 let lastEnergyLogTime = 0;
 
 function switchTab(tab: TabName): void {
@@ -76,7 +75,6 @@ function setEnergyTier(tier: EnergyTier, log = true): void {
     lastEnergyLogTime = Date.now();
     hideCheckinToast();
     showReorderSuggestion(value);
-    scheduleEnergyCheckin();
   }
 }
 
@@ -167,21 +165,11 @@ function showReorderSuggestion(energy: number): void {
 
 // --- Energy check-in toast ---
 
-function scheduleEnergyCheckin(): void {
-  if (checkinTimer) clearTimeout(checkinTimer);
-  checkinTimer = setTimeout(() => showCheckinToast(), CHECKIN_INTERVAL_MS);
-}
-
+/** Show the energy check-in toast only during daytime hours. */
 function showCheckinToast(): void {
   const h = new Date().getHours();
-  if (h < 9 || h >= 21) {
-    // Outside 9AM-9PM — schedule for next window
-    scheduleEnergyCheckin();
-    return;
-  }
-
-  const toast = $id('energyCheckinToast');
-  toast.style.display = 'flex';
+  if (h < 9 || h >= 21) return; // outside 9AM-9PM — don't interrupt
+  $id('energyCheckinToast').style.display = 'flex';
 }
 
 function hideCheckinToast(): void {
@@ -255,7 +243,6 @@ function initUI(): void {
   });
   $id('checkinDismiss').addEventListener('click', () => {
     hideCheckinToast();
-    scheduleEnergyCheckin();
   });
 
   // Add block button
@@ -308,19 +295,10 @@ async function onUserSignedIn(userId: string): Promise<void> {
     btn.classList.remove('active');
   });
 
-  // Determine last energy log time for check-in scheduling
+  // Track last energy log time for return-nudge logic
   if (state.energyLogs.length > 0) {
     const lastLog = state.energyLogs[state.energyLogs.length - 1];
     lastEnergyLogTime = new Date(lastLog.logged_at).getTime();
-  }
-
-  // Schedule first energy check-in based on time since last log
-  const elapsed = Date.now() - lastEnergyLogTime;
-  if (elapsed >= CHECKIN_INTERVAL_MS) {
-    // It's been 2+ hours — prompt soon (10 seconds after load)
-    checkinTimer = setTimeout(() => showCheckinToast(), 10_000);
-  } else {
-    checkinTimer = setTimeout(() => showCheckinToast(), CHECKIN_INTERVAL_MS - elapsed);
   }
 
   // Check if we're returning from a calendar OAuth redirect
@@ -374,7 +352,7 @@ document.addEventListener('visibilitychange', async () => {
 
   await state.refresh();
 
-  // Sync energy UI + check-in timer from refreshed data
+  // Sync energy UI from refreshed data
   const tier = valueToTier(state.energy);
   setEnergyTier(tier, false);
 
@@ -383,13 +361,13 @@ document.addEventListener('visibilitychange', async () => {
     lastEnergyLogTime = new Date(lastLog.logged_at).getTime();
   }
 
-  const elapsed = Date.now() - lastEnergyLogTime;
-  if (elapsed >= CHECKIN_INTERVAL_MS) {
+  // Gentle nudge only when returning after a long absence
+  const awayMs = lastHiddenAt > 0 ? Date.now() - lastHiddenAt : 0;
+  const sinceLastLog = Date.now() - lastEnergyLogTime;
+  if (awayMs >= RETURN_NUDGE_MS && sinceLastLog >= RETURN_NUDGE_MS) {
     showCheckinToast();
   } else {
     hideCheckinToast();
-    if (checkinTimer) clearTimeout(checkinTimer);
-    checkinTimer = setTimeout(() => showCheckinToast(), CHECKIN_INTERVAL_MS - elapsed);
   }
 
   // Re-render the active view

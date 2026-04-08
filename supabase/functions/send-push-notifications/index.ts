@@ -268,59 +268,6 @@ serve(async () => {
     }
   }
 
-  // --- Energy check-in notifications ---
-  // Every 2 hours between 9AM-9PM in the user's timezone.
-  // Slots: 9, 11, 13, 15, 17, 19
-
-  const ENERGY_SLOTS = [9, 11, 13, 15, 17, 19];
-
-  for (const [userId, userSubs] of subsByUser) {
-    const tz = userSubs[0].timezone || 'UTC';
-    const localDate = now.toLocaleDateString('en-CA', { timeZone: tz });
-    const nowMinutes = localMinutesSinceMidnight(now, tz);
-
-    const dueSlot = ENERGY_SLOTS.find((slotHour) => {
-      const slotMinutes = slotHour * 60;
-      const diff = slotMinutes - nowMinutes;
-      return diff >= -5 && diff <= 5;
-    });
-
-    if (dueSlot === undefined) continue;
-
-    // Dedup: one notification per user per slot per day
-    const { error: dedupErr } = await supabase
-      .from('energy_checkin_notification_log')
-      .insert({
-        user_id: userId,
-        checkin_date: localDate,
-        slot_hour: dueSlot,
-      });
-
-    if (dedupErr) continue;
-
-    // Skip if user already logged energy in the last 90 minutes
-    const cutoff = new Date(now.getTime() - 90 * 60 * 1000).toISOString();
-    const { count: recentLogs } = await supabase
-      .from('energy_logs')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .gte('logged_at', cutoff);
-
-    if (recentLogs && recentLogs > 0) continue;
-
-    const payload = JSON.stringify({
-      title: '\uD83C\uDF31 Energy Check-in',
-      body: 'How are you feeling right now? Log your energy.',
-      icon: '/icons/icon.png',
-      tag: 'energy-checkin',
-      url: '/?action=energy-checkin',
-      type: 'energy-checkin',
-    });
-
-    // Send to ALL of this user's devices
-    sent += await sendToAll(userSubs, payload);
-  }
-
   // --- Pomodoro timer notifications ---
   // When a user starts a pomo session, the client saves the expected completion
   // time.  If the app is suspended (e.g. iOS PWA), the cron picks it up here.

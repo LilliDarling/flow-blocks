@@ -44,6 +44,7 @@ class AppState {
   calendarConnections: CalendarConnection[] = [];
   calendarEvents: CalendarEvent[] = [];
   weekCalendarEvents: Map<string, CalendarEvent[]> = new Map(); // "YYYY-MM-DD" -> events
+  hiddenCalendarEventIds: Set<string> = new Set(); // events hidden from today's view
   pomoSessions: PomoSession[] = [];
   reminders: Reminder[] = [];
   reminderCompletions: Set<string> = new Set(); // reminder IDs completed today
@@ -108,6 +109,7 @@ class AppState {
     }
 
     // Load calendar connections + events
+    this.loadHiddenCalendarEvents();
     await this.loadCalendar();
 
     // Fetch done items (today only)
@@ -464,6 +466,26 @@ class AppState {
     this.calendarEvents = this.calendarConnections.length > 0
       ? await fetchAllEvents(this.calendarConnections, today)
       : [];
+  }
+
+  // --- Hidden calendar events ---
+
+  hideCalendarEvent(eventId: string): void {
+    this.hiddenCalendarEventIds.add(eventId);
+    const key = `hidden_cal_${getTodayDate()}`;
+    localStorage.setItem(key, JSON.stringify([...this.hiddenCalendarEventIds]));
+  }
+
+  loadHiddenCalendarEvents(): void {
+    const today = getTodayDate();
+    const key = `hidden_cal_${today}`;
+    const stored = localStorage.getItem(key);
+    this.hiddenCalendarEventIds = new Set(stored ? JSON.parse(stored) : []);
+    // Clean up keys from prior days
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('hidden_cal_') && k !== key) localStorage.removeItem(k);
+    }
   }
 
   // --- Energy logging ---

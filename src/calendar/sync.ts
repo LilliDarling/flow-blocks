@@ -65,14 +65,27 @@ function findConflicts(events: CalendarEvent[], bufferAfter: number = 10): Confl
   return conflicts;
 }
 
+/** Remove cal_sync_ keys from previous days so localStorage doesn't accumulate. */
+function cleanOldSyncKeys(today: string): void {
+  const todayKey = `cal_sync_${today}`;
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith('cal_sync_') && key !== todayKey) {
+      localStorage.removeItem(key);
+    }
+  }
+}
+
 /** Show the calendar sync dialog. Only shows for non-all-day events. */
 export function showCalendarSyncDialog(): void {
   const events = state.calendarEvents.filter(e => !e.allDay);
   if (events.length === 0) return;
 
-  // Check sessionStorage to avoid showing repeatedly
-  const syncKey = `cal_sync_${getTodayDate()}`;
-  const seenIds = JSON.parse(sessionStorage.getItem(syncKey) || '[]') as string[];
+  // Check localStorage to avoid showing repeatedly (survives mobile backgrounding)
+  const today = getTodayDate();
+  const syncKey = `cal_sync_${today}`;
+  cleanOldSyncKeys(today);
+  const seenIds = JSON.parse(localStorage.getItem(syncKey) || '[]') as string[];
   const newEvents = events.filter(e => !seenIds.includes(e.id));
   if (newEvents.length === 0) return;
 
@@ -140,7 +153,7 @@ export function showCalendarSyncDialog(): void {
   $id('calSyncSkip').onclick = () => {
     // Mark events as seen so dialog doesn't reappear
     const allIds = [...seenIds, ...newEvents.map(e => e.id)];
-    sessionStorage.setItem(syncKey, JSON.stringify(allIds));
+    localStorage.setItem(syncKey, JSON.stringify(allIds));
     $id('calSyncModal').classList.remove('open');
   };
 
@@ -161,7 +174,7 @@ export function showCalendarSyncDialog(): void {
 
     // Mark events as seen
     const allIds = [...seenIds, ...newEvents.map(e => e.id)];
-    sessionStorage.setItem(syncKey, JSON.stringify(allIds));
+    localStorage.setItem(syncKey, JSON.stringify(allIds));
     $id('calSyncModal').classList.remove('open');
     renderTimeline();
   };
