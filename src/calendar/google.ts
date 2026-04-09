@@ -63,6 +63,12 @@ export const googleProvider: CalendarProvider = {
         for (const item of data.items || []) {
           if (item.status === 'cancelled') continue;
 
+          // Skip events the user hasn't accepted (declined or not yet responded)
+          if (item.attendees) {
+            const self = item.attendees.find((a: { self?: boolean }) => a.self);
+            if (self && (self.responseStatus === 'declined' || self.responseStatus === 'needsAction')) continue;
+          }
+
           const allDay = !!item.start?.date;
           const startDt = allDay ? null : new Date(item.start.dateTime);
           const endDt = allDay ? null : new Date(item.end.dateTime);

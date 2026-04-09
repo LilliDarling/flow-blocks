@@ -45,6 +45,7 @@ class AppState {
   calendarEvents: CalendarEvent[] = [];
   weekCalendarEvents: Map<string, CalendarEvent[]> = new Map(); // "YYYY-MM-DD" -> events
   hiddenCalendarEventIds: Set<string> = new Set(); // events hidden from today's view
+  calSyncSeenIds: Set<string> = new Set(); // event IDs already prompted for buffer (synced via Supabase)
   pomoSessions: PomoSession[] = [];
   reminders: Reminder[] = [];
   reminderCompletions: Set<string> = new Set(); // reminder IDs completed today
@@ -378,6 +379,7 @@ class AppState {
     if (this.calendarConnections.length > 0) {
       const today = getTodayDate();
       this.calendarEvents = await fetchAllEvents(this.calendarConnections, today);
+      await this.loadCalSyncSeen();
       await this.reconcileBuffers();
       // Fetch events for the full week (for week view)
       this.loadWeekCalendar();
@@ -486,6 +488,31 @@ class AppState {
       const k = localStorage.key(i);
       if (k && k.startsWith('hidden_cal_') && k !== key) localStorage.removeItem(k);
     }
+  }
+
+  // --- Calendar sync seen (cross-device) ---
+
+  async loadCalSyncSeen(): Promise<void> {
+    if (!this.userId) return;
+    const today = getTodayDate();
+    const { data } = await supabase
+      .from('cal_event_seen')
+      .select('event_id')
+      .eq('user_id', this.userId)
+      .eq('seen_date', today);
+    this.calSyncSeenIds = new Set((data || []).map((r: { event_id: string }) => r.event_id));
+  }
+
+  async markCalEventsSeen(eventIds: string[]): Promise<void> {
+    if (!this.userId) return;
+    const today = getTodayDate();
+    const newIds = eventIds.filter(id => !this.calSyncSeenIds.has(id));
+    if (newIds.length === 0) return;
+    await supabase.from('cal_event_seen').upsert(
+      newIds.map(id => ({ user_id: this.userId, event_id: id, seen_date: today })),
+      { onConflict: 'user_id,event_id,seen_date' },
+    );
+    for (const id of newIds) this.calSyncSeenIds.add(id);
   }
 
   // --- Energy logging ---

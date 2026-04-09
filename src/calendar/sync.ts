@@ -65,28 +65,13 @@ function findConflicts(events: CalendarEvent[], bufferAfter: number = 10): Confl
   return conflicts;
 }
 
-/** Remove cal_sync_ keys from previous days so localStorage doesn't accumulate. */
-function cleanOldSyncKeys(today: string): void {
-  const todayKey = `cal_sync_${today}`;
-  for (let i = localStorage.length - 1; i >= 0; i--) {
-    const key = localStorage.key(i);
-    if (key && key.startsWith('cal_sync_') && key !== todayKey) {
-      localStorage.removeItem(key);
-    }
-  }
-}
-
 /** Show the calendar sync dialog. Only shows for non-all-day events. */
 export function showCalendarSyncDialog(): void {
   const events = state.calendarEvents.filter(e => !e.allDay);
   if (events.length === 0) return;
 
-  // Check localStorage to avoid showing repeatedly (survives mobile backgrounding)
-  const today = getTodayDate();
-  const syncKey = `cal_sync_${today}`;
-  cleanOldSyncKeys(today);
-  const seenIds = JSON.parse(localStorage.getItem(syncKey) || '[]') as string[];
-  const newEvents = events.filter(e => !seenIds.includes(e.id));
+  // Use Supabase-synced seen IDs (works across devices)
+  const newEvents = events.filter(e => !state.calSyncSeenIds.has(e.id));
   if (newEvents.length === 0) return;
 
   const conflicts = findConflicts(newEvents);
@@ -151,9 +136,8 @@ export function showCalendarSyncDialog(): void {
 
   // Wire up buttons
   $id('calSyncSkip').onclick = () => {
-    // Mark events as seen so dialog doesn't reappear
-    const allIds = [...seenIds, ...newEvents.map(e => e.id)];
-    localStorage.setItem(syncKey, JSON.stringify(allIds));
+    // Mark events as seen so dialog doesn't reappear (syncs cross-device)
+    state.markCalEventsSeen(newEvents.map(e => e.id));
     $id('calSyncModal').classList.remove('open');
   };
 
@@ -172,9 +156,8 @@ export function showCalendarSyncDialog(): void {
 
     await applySync(bufferChoices, conflicts);
 
-    // Mark events as seen
-    const allIds = [...seenIds, ...newEvents.map(e => e.id)];
-    localStorage.setItem(syncKey, JSON.stringify(allIds));
+    // Mark events as seen (syncs cross-device)
+    state.markCalEventsSeen(newEvents.map(e => e.id));
     $id('calSyncModal').classList.remove('open');
     renderTimeline();
   };
