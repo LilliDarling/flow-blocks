@@ -44,11 +44,11 @@ export const ENERGY_FIT: Record<BlockType, [number, number]> = {
   buffer:  [1, 10],
 };
 
-/** Suggestion messages keyed by energy tier. */
+/** Suggestion messages keyed by energy tier — invitations, not directives. */
 export function energySuggestion(energy: number): string {
-  if (energy <= 3) return 'Low energy — rest or drift blocks are your friend right now. Be gentle.';
-  if (energy <= 6) return 'Moderate energy — steady, growth, or flow blocks are your sweet spot.';
-  return 'High energy — great time to push. Ride the wave!';
+  if (energy <= 3) return 'Low energy — rest or drift might feel good right now. Be gentle with yourself.';
+  if (energy <= 6) return 'Some energy to work with — steady, growth, or flow could be a good fit.';
+  return 'Feeling energized — could be a good window for something that takes focus.';
 }
 
 /** Suggested menu items per block type — things that match the energy demand of each type. */
@@ -162,7 +162,7 @@ export interface BlockRow {
   type: string;
   title: string;
   menu: string[];
-  start_time: string;
+  start_time: string | null;
   duration: number;
   days: number[];
   block_date: string | null;
@@ -271,13 +271,18 @@ export interface PomoSessionRow {
   created_at: string;
 }
 
+/** A block is "scheduled" (pinned to a time) if it has a non-empty start time. */
+export function isScheduled(block: FlowBlock): boolean {
+  return block.start !== '';
+}
+
 export function blockFromRow(row: BlockRow): FlowBlock {
   return {
     id: row.id,
     type: row.type as BlockType,
     title: row.title,
     menu: row.menu || [],
-    start: row.start_time.slice(0, 5), // "HH:MM:SS" -> "HH:MM"
+    start: row.start_time ? row.start_time.slice(0, 5) : '', // empty = pool item
     duration: row.duration,
     days: row.days || [],
     date: row.block_date,

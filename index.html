@@ -156,26 +156,52 @@
 <div class="view active" id="day-view">
   <div class="day-controls">
     <div class="energy-check">
-      <label>Energy right now:</label>
+      <label>How are you feeling?</label>
       <div class="energy-buttons" id="energyButtons">
         <button class="energy-btn energy-low" data-energy="low">Low</button>
         <button class="energy-btn energy-med" data-energy="med">Med</button>
         <button class="energy-btn energy-high" data-energy="high">High</button>
       </div>
     </div>
-    <button class="add-block-btn" id="addBlockBtn">+ Add Block</button>
-    <button class="quick-start-btn" id="quickStartBtn">Plan my day</button>
+    <button class="add-block-btn" id="addBlockBtn">+ Add something</button>
+    <button class="quick-start-btn" id="quickStartBtn">Brain dump</button>
   </div>
 
   <div class="energy-suggestion" id="energySuggestion"></div>
   <div class="reorder-suggestion" id="reorderSuggestion" style="display:none"></div>
   <div id="dayInsights"></div>
-  <div class="timeline" id="timeline"></div>
 
-  <div class="done-list-section" id="doneSection" style="display:none">
-    <h3>What you actually did today</h3>
+  <!-- Pool: available tasks — this is the main event -->
+  <div class="pool-section" id="poolSection">
+    <h3 class="section-heading">What's available</h3>
+    <p class="pool-hint" id="poolHint">Pick what fits your energy right now</p>
+    <div class="pool-grid" id="poolGrid"></div>
+    <div class="pool-empty" id="poolEmpty" style="display:none">
+      <p>Nothing here yet</p>
+      <p class="pool-empty-sub">Add something when you're ready, or hit Brain dump to get things out of your head</p>
+    </div>
+  </div>
+
+  <!-- Commitments: calendar events + pinned blocks — secondary, collapsible -->
+  <div class="commitments-section" id="commitmentsSection" style="display:none">
+    <button class="commitments-toggle" id="commitmentsToggle">
+      <h3 class="section-heading commitments-heading">
+        <span class="commitments-heading-text">Pinned to a time</span>
+        <span class="commitments-count" id="commitmentsCount"></span>
+        <span class="commitments-chevron">&#9662;</span>
+      </h3>
+    </button>
+    <div class="commitments-collapsible" id="commitmentsCollapsible">
+      <div class="commitments-list" id="commitmentsList"></div>
+      <button class="btn btn-ghost sideways-btn" id="sidewaysBtn">Day went sideways? Let it go</button>
+    </div>
+  </div>
+
+  <div class="done-list-section" id="doneSection">
+    <h3>What you actually did</h3>
     <div id="doneList"></div>
     <div class="done-count" id="doneCount"></div>
+    <button class="btn btn-ghost log-other-btn" id="logOtherBtn">Did something else?</button>
   </div>
 </div>
 
@@ -323,35 +349,35 @@
   <div class="tips-view">
     <div class="tip-card">
       <h3><span class="tip-icon">🌱</span> Energy-first, not time-first</h3>
-      <p>You don't run on a clock — you run on energy and interest. Schedule block <em>types</em> (push, flow, steady, drift) based on what each task demands from you. When you arrive at a block, pick from your menu based on what you can actually handle right now.</p>
+      <p>You don't run on a clock — you run on energy and interest. Your pool is full of things you <em>could</em> do. Check in with how you're feeling, and the app highlights what fits. No pressure to decide in advance what goes where.</p>
     </div>
     <div class="tip-card">
       <h3><span class="tip-icon">🚪</span> Transition buffers are airlocks</h3>
-      <p>Switching gears takes time — more than you think. Those 10-15 minute buffers between blocks aren't wasted time; they're the space you need to let go of one thing and gear up for the next. Protect them fiercely.</p>
+      <p>Switching gears takes time — more than you think. Those 10-15 minute buffers between pinned blocks aren't wasted time; they're the space you need to let go of one thing and gear up for the next. Protect them fiercely.</p>
     </div>
     <div class="tip-card">
       <h3><span class="tip-icon">🍽️</span> The menu approach</h3>
-      <p>Give yourself 2-3 task options per block. "Push: tackle report OR deep-clean kitchen OR intense workout." Having choices gives you autonomy and novelty, which makes engagement way more likely than a single rigid assignment.</p>
+      <p>Give yourself 2-3 task options per card. "Push: tackle report OR deep-clean kitchen OR intense workout." Having choices gives you autonomy and novelty, which makes engagement way more likely than a single rigid assignment.</p>
     </div>
     <div class="tip-card">
-      <h3><span class="tip-icon">⚓</span> Anchor, don't chain</h3>
-      <p>Pick 2-3 non-negotiable anchors for your day (morning check-in, one push block, wind-down). Let everything else flex around those. Fewer rigid commitments = less guilt when things shift, which they will. And that's fine.</p>
+      <h3><span class="tip-icon">⚓</span> Pin only what truly needs a time</h3>
+      <p>Meetings, appointments, time-sensitive things — those get pinned. Everything else lives in your pool. The fewer rigid commitments, the less guilt when things shift. And they will shift. That's fine.</p>
     </div>
     <div class="tip-card">
       <h3><span class="tip-icon">✅</span> Track what you DID, not just what you planned</h3>
-      <p>We tend to undercount our own output. The "done list" at the bottom of your day view exists for this reason. Mark things complete as you go — you'll be surprised how much you actually accomplish.</p>
+      <p>We tend to undercount our own output. The "done" list exists for this reason. Mark things as you go — you'll be surprised how much you actually do in a day.</p>
     </div>
     <div class="tip-card">
       <h3><span class="tip-icon">🔋</span> Low energy is data, not a flaw</h3>
-      <p>Some days your battery is at 30%. That's information, not a character flaw. On low-energy days, lean into drift and rest blocks. Trying to force a push when you're depleted just creates shame spirals. Respect the battery level.</p>
+      <p>Some days your battery is at 30%. That's information, not a character flaw. On low-energy days, the pool highlights drift and rest options. Trying to force a push when you're depleted just creates shame spirals. Respect the battery level.</p>
     </div>
     <div class="tip-card">
       <h3><span class="tip-icon">🌿</span> Growth isn't always productive</h3>
       <p>Journaling, therapy, learning, reflecting — these are growth blocks. They don't produce a deliverable, but they're some of the most important work you'll do. Give them space in your day without guilt.</p>
     </div>
     <div class="tip-card">
-      <h3><span class="tip-icon">🔄</span> The "good enough" schedule</h3>
-      <p>Perfectionism kills every system eventually. If you followed 60% of your plan, that's a win. The goal isn't robotic adherence — it's gentle structure that catches you when motivation dips.</p>
+      <h3><span class="tip-icon">🌀</span> Going off-script is a feature</h3>
+      <p>Your day went sideways? That's not failure — that's life. Hit the "day went sideways" button, log what you actually did, and the remaining tasks go back to options. There's no "ruined plan," just a different day.</p>
     </div>
 
     <div class="data-notice">
@@ -378,9 +404,9 @@
 <!-- MODAL -->
 <div class="modal-overlay" id="modal">
   <div class="modal">
-    <h2 id="modalTitle">Add Block</h2>
+    <h2 id="modalTitle">Add something</h2>
     <div class="form-group">
-      <label>Block type</label>
+      <label>What kind of energy does this need?</label>
       <div class="type-options">
         <button class="type-option" data-type="push"><span class="type-dot" style="background:var(--push)"></span>Push</button>
         <button class="type-option" data-type="flow"><span class="type-dot" style="background:var(--flow)"></span>Flow</button>
@@ -393,45 +419,54 @@
       <div class="type-description" id="typeDescription"></div>
     </div>
     <div class="form-group">
-      <label>Title (or leave blank to decide later)</label>
+      <label>What is it? (or leave blank to decide later)</label>
       <input type="text" id="blockTitle" placeholder="e.g. Morning workout">
     </div>
     <div class="form-group">
-      <label>Menu options — what could you do in this block? (one per line)</label>
+      <label>Options — what might you do? (one per line)</label>
       <textarea id="blockMenu" placeholder="Write project proposal&#10;Organize research notes&#10;Review pull requests"></textarea>
       <div class="menu-suggestions" id="menuSuggestions"></div>
     </div>
-    <div class="form-group" style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px">
-      <div>
-        <label>Start time</label>
-        <select id="blockStart"></select>
-      </div>
-      <div>
-        <label>Duration (minutes)</label>
-        <select id="blockDuration">
-          <option value="15">15 min</option>
-          <option value="25">25 min (pomodoro)</option>
-          <option value="30">30 min</option>
-          <option value="45">45 min</option>
-          <option value="60" selected>60 min</option>
-          <option value="90">90 min</option>
-          <option value="120">2 hours</option>
-        </select>
-      </div>
+    <div class="form-group">
+      <label>How long might this take?</label>
+      <select id="blockDuration">
+        <option value="15">15 min</option>
+        <option value="25">25 min (pomodoro)</option>
+        <option value="30">30 min</option>
+        <option value="45">45 min</option>
+        <option value="60" selected>60 min</option>
+        <option value="90">90 min</option>
+        <option value="120">2 hours</option>
+      </select>
     </div>
     <div class="form-group">
-      <label>Schedule</label>
+      <label>When?</label>
       <div class="sched-toggle">
-        <button class="sched-btn selected" id="schedToday">One-off</button>
-        <button class="sched-btn" id="schedRecurring">Recurring</button>
+        <button class="sched-btn selected" id="schedPool">Available anytime</button>
+        <button class="sched-btn" id="schedPinned">Pin to a time</button>
       </div>
-      <div id="datePickerGroup" style="margin-top:10px">
-        <label style="font-size:0.8rem;opacity:0.7">Date</label>
-        <input type="date" id="blockDate">
-      </div>
-      <div id="dayPickersGroup" style="display:none;margin-top:10px">
-        <label style="font-size:0.8rem;opacity:0.7">Repeat on</label>
-        <div style="display:flex; gap:6px; flex-wrap:wrap" id="dayPickers"></div>
+      <div id="pinnedOptions" style="display:none;margin-top:10px">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom:10px">
+          <div>
+            <label style="font-size:0.8rem;opacity:0.7">Start time</label>
+            <select id="blockStart"></select>
+          </div>
+          <div>
+            <label style="font-size:0.8rem;opacity:0.7">Type</label>
+            <div class="sched-toggle">
+              <button class="sched-btn selected" id="schedToday">One-off</button>
+              <button class="sched-btn" id="schedRecurring">Recurring</button>
+            </div>
+          </div>
+        </div>
+        <div id="datePickerGroup" style="margin-top:10px">
+          <label style="font-size:0.8rem;opacity:0.7">Date</label>
+          <input type="date" id="blockDate">
+        </div>
+        <div id="dayPickersGroup" style="display:none;margin-top:10px">
+          <label style="font-size:0.8rem;opacity:0.7">Repeat on</label>
+          <div style="display:flex; gap:6px; flex-wrap:wrap" id="dayPickers"></div>
+        </div>
       </div>
     </div>
     <div class="modal-buttons">
@@ -482,7 +517,7 @@
       <input type="text" class="reminder-icon-input" id="reminderIconInput" placeholder="e.g. 💊" maxlength="4">
     </div>
     <div class="form-group">
-      <label>What do you need to do?</label>
+      <label>What's the reminder for?</label>
       <input type="text" id="reminderName" placeholder="e.g. Take vitamin D">
     </div>
     <div class="form-group">
@@ -503,7 +538,7 @@
 
 <!-- Energy check-in toast -->
 <div class="energy-checkin-toast" id="energyCheckinToast" style="display:none">
-  <span class="checkin-label">How are you feeling right now?</span>
+  <span class="checkin-label">Welcome back — how's your energy?</span>
   <div class="checkin-buttons">
     <button class="energy-btn energy-low" data-checkin="low">Low</button>
     <button class="energy-btn energy-med" data-checkin="med">Med</button>

@@ -16,17 +16,6 @@ const QUICK_TASK_PATTERNS = [
   /\bunload\b/, /\bload\s+(the\s+)?dishwasher/,
 ];
 
-/** Energy priority for ordering: higher-energy types go earlier in the day. */
-const TYPE_ENERGY_PRIORITY: Record<BlockType, number> = {
-  push: 0,
-  flow: 1,
-  steady: 2,
-  growth: 3,
-  drift: 4,
-  rest: 5,
-  buffer: 6,
-};
-
 /** Block types where tasks are interchangeable "pick one" options (group into one block). */
 const GROUPABLE_TYPES = new Set<BlockType>(['drift', 'rest']);
 
@@ -41,24 +30,16 @@ const DEFAULT_DURATIONS: Record<BlockType, number> = {
   buffer: 15,
 };
 
-/** Short duration for quick tasks. */
 const QUICK_DURATION = 15;
 
-/**
- * Match a free-text task to a block type.
- * Uses stem/prefix matching against BLOCK_TYPE_KEYWORDS, not just exact words.
- * Falls back to 'steady' if nothing matches.
- */
 function inferBlockType(text: string): BlockType {
   const lower = text.toLowerCase();
   const words = lower.split(/\s+/);
 
-  // Exact word match first
   for (const word of words) {
     if (BLOCK_TYPE_KEYWORDS[word]) return BLOCK_TYPE_KEYWORDS[word];
   }
 
-  // Stem/prefix match: "feeding" matches "feed", "cooking" matches "cook", etc.
   const keywords = Object.keys(BLOCK_TYPE_KEYWORDS);
   for (const word of words) {
     for (const kw of keywords) {
@@ -68,7 +49,6 @@ function inferBlockType(text: string): BlockType {
     }
   }
 
-  // Phrase-level match: check if the whole text contains a keyword
   for (const kw of keywords) {
     if (lower.includes(kw)) return BLOCK_TYPE_KEYWORDS[kw];
   }
@@ -76,14 +56,13 @@ function inferBlockType(text: string): BlockType {
   return 'steady';
 }
 
-/** Check if a task is a quick task (< 15 min). */
 function isQuickTask(text: string): boolean {
   const lower = text.toLowerCase();
   return QUICK_TASK_PATTERNS.some(p => p.test(lower));
 }
 
 // ────────────────────────────────────────────────────────────
-// Group & Schedule
+// Group (no scheduling — everything goes to pool)
 // ────────────────────────────────────────────────────────────
 
 interface ParsedTask {
@@ -92,19 +71,14 @@ interface ParsedTask {
   quick: boolean;
 }
 
-interface PlannedBlock {
+interface PoolItem {
   title: string;
   menu: string[];
   type: BlockType;
   duration: number;
-  start: string; // "HH:MM"
 }
 
-/**
- * Parse input into tasks, group by block type into blocks with menu items,
- * order by energy priority (push first, rest last), and spread across the day.
- */
-function parseAndSchedule(input: string): PlannedBlock[] {
+function parseIntoPooItems(input: string): PoolItem[] {
   const rawTasks = input
     .split(/[,\n]+/)
     .map(s => s.trim())
@@ -112,16 +86,13 @@ function parseAndSchedule(input: string): PlannedBlock[] {
 
   if (rawTasks.length === 0) return [];
 
-  // Step 1: Classify each task
   const parsed: ParsedTask[] = rawTasks.map(text => ({
     text,
     type: inferBlockType(text),
     quick: isQuickTask(text),
   }));
 
-  // Step 2: Group only drift/rest tasks (interchangeable chores/rest options).
-  //         Everything else gets its own block — focused work isn't interchangeable.
-  const groupedBlocks: PlannedBlock[] = [];
+  const items: PoolItem[] = [];
   const groupBuckets = new Map<BlockType, ParsedTask[]>();
 
   for (const task of parsed) {
@@ -129,67 +100,31 @@ function parseAndSchedule(input: string): PlannedBlock[] {
       if (!groupBuckets.has(task.type)) groupBuckets.set(task.type, []);
       groupBuckets.get(task.type)!.push(task);
     } else {
-      // Individual block for this task
-      groupedBlocks.push({
+      items.push({
         title: task.text,
         menu: [task.text],
         type: task.type,
         duration: task.quick ? QUICK_DURATION : DEFAULT_DURATIONS[task.type],
-        start: '',
       });
     }
   }
 
-  // Create one block per groupable type with all tasks as menu options
   for (const [type, tasks] of groupBuckets) {
     const allQuick = tasks.every(t => t.quick);
-    groupedBlocks.push({
+    items.push({
       title: tasks.length === 1 ? tasks[0].text : TYPE_LABELS[type],
       menu: tasks.map(t => t.text),
       type,
       duration: allQuick ? QUICK_DURATION : DEFAULT_DURATIONS[type],
-      start: '',
     });
   }
 
-  // Step 3: Sort by energy priority (push first, rest last)
-  groupedBlocks.sort(
-    (a, b) => TYPE_ENERGY_PRIORITY[a.type] - TYPE_ENERGY_PRIORITY[b.type]
-  );
-
-  // Step 4: Assign start times from now, with buffers between blocks
-  const now = new Date();
-  let startMin = now.getHours() * 60 + now.getMinutes();
-  startMin = Math.ceil(startMin / 30) * 30; // round up to next :00 or :30
-
-  const endOfDay = 21 * 60;
-
-  const scheduled: PlannedBlock[] = [];
-  for (const block of groupedBlocks) {
-    if (startMin + block.duration > endOfDay) break;
-
-    const h = Math.floor(startMin / 60);
-    const m = startMin % 60;
-    block.start = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-    scheduled.push(block);
-
-    startMin += block.duration + 15; // 15-min buffer
-  }
-
-  return scheduled;
+  return items;
 }
 
 // ────────────────────────────────────────────────────────────
 // UI
 // ────────────────────────────────────────────────────────────
-
-function fmtPreviewTime(start: string): string {
-  const h = parseInt(start.split(':')[0]);
-  const m = start.split(':')[1];
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  const h12 = h % 12 || 12;
-  return `${h12}:${m} ${ampm}`;
-}
 
 function showQuickStart(): void {
   const overlay = document.createElement('div');
@@ -197,13 +132,13 @@ function showQuickStart(): void {
 
   overlay.innerHTML = `
     <div class="quickstart-modal">
-      <h3>What do you need to do today?</h3>
-      <p class="quickstart-sub">List your tasks, separated by commas. The app will suggest block types and times based on energy levels — nothing is set in stone. You can edit, rearrange, or change any block after.</p>
+      <h3>What's floating around in your head?</h3>
+      <p class="quickstart-sub">Get it all out — separate with commas or new lines. Nothing gets scheduled, it all goes into your pool. You decide what to do when you're ready.</p>
       <textarea class="quickstart-input" rows="4" placeholder="e.g. gym, emails, work on thesis, cook dinner, feed the fish"></textarea>
       <div class="quickstart-preview" id="quickstartPreview"></div>
-      <p class="quickstart-hint">This is just a starting point. Tap any block to edit the type, time, or tasks once it's on your timeline.</p>
+      <p class="quickstart-hint">Everything lands in your pool as options. Pick from them whenever the energy fits.</p>
       <div class="quickstart-actions">
-        <button class="btn btn-primary quickstart-go" disabled>Build my day</button>
+        <button class="btn btn-primary quickstart-go" disabled>Add to pool</button>
         <button class="btn btn-ghost quickstart-cancel">Cancel</button>
       </div>
     </div>`;
@@ -215,11 +150,11 @@ function showQuickStart(): void {
   const goBtn = overlay.querySelector('.quickstart-go') as HTMLButtonElement;
   const cancelBtn = overlay.querySelector('.quickstart-cancel') as HTMLButtonElement;
 
-  let planned: PlannedBlock[] = [];
+  let planned: PoolItem[] = [];
 
   const updatePreview = (): void => {
     const value = textarea.value.trim();
-    planned = parseAndSchedule(value);
+    planned = parseIntoPooItems(value);
     goBtn.disabled = planned.length === 0;
 
     if (planned.length === 0) {
@@ -237,7 +172,7 @@ function showQuickStart(): void {
           <span class="quickstart-preview-text">${esc(b.title)}</span>
           ${menuStr}
         </div>
-        <span class="quickstart-preview-time">${fmtPreviewTime(b.start)} · ${b.duration}m</span>
+        <span class="quickstart-preview-time">~${b.duration}m</span>
       </div>`;
     }).join('');
   };
@@ -247,19 +182,17 @@ function showQuickStart(): void {
   goBtn.addEventListener('click', async () => {
     if (planned.length === 0) return;
     goBtn.disabled = true;
-    goBtn.textContent = 'Building...';
-
-    const today = getTodayDate();
+    goBtn.textContent = 'Adding...';
 
     for (const b of planned) {
       const block: FlowBlock = {
         type: b.type,
         title: b.title,
         menu: b.menu,
-        start: b.start,
+        start: '',       // no time = pool item
         duration: b.duration,
         days: [],
-        date: today,
+        date: null,      // persistent — stays until completed or removed
         status: 'pending',
       };
       await state.addBlock(block, 'modal');

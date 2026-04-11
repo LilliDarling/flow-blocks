@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { DAYS, TYPE_LABELS, getTodayIndex, getTodayDate, getDateForDayIndex, FlowBlock, $id, esc } from './utils.js';
+import { DAYS, TYPE_LABELS, getTodayIndex, getTodayDate, getDateForDayIndex, FlowBlock, isScheduled, $id, esc } from './utils.js';
 import { openModal, openModalForSlot } from './modal.js';
 import type { CalendarEvent } from './calendar/types.js';
 
@@ -71,6 +71,7 @@ export function renderWeek(): void {
 
     state.blocks.forEach((b, idx) => {
       if (!blockVisibleOnDay(b, dayIdx)) return;
+      if (!isScheduled(b)) return; // skip pool blocks — they have no time position
       const [bh, bm] = b.start.split(':').map(Number);
       const startMin = bh * 60 + (bm || 0);
       const endMin = startMin + b.duration;

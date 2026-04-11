@@ -25,8 +25,8 @@ import { initQuickStart } from './quickstart.js';
 type TabName = 'day' | 'week' | 'routines' | 'pomo' | 'energy' | 'tips';
 const TAB_ORDER: TabName[] = ['day', 'week', 'routines', 'pomo', 'energy', 'tips'];
 
-// --- Energy check-in (gentle return nudge) ---
-const RETURN_NUDGE_MS = 3 * 60 * 60 * 1000; // 3 hours away before nudging
+// --- Energy check-in ---
+const CHECKIN_INTERVAL_MS = 60 * 60 * 1000; // prompt after 1 hour since last log
 let lastEnergyLogTime = 0;
 
 function switchTab(tab: TabName): void {
@@ -78,7 +78,7 @@ function setEnergyTier(tier: EnergyTier, log = true): void {
   }
 }
 
-// --- Reorder suggestion ---
+// --- Reorder suggestion (only for pinned/scheduled blocks) ---
 
 function showReorderSuggestion(energy: number): void {
   const container = $id('reorderSuggestion');
@@ -86,8 +86,9 @@ function showReorderSuggestion(energy: number): void {
   const dayIdx = getTodayIndex();
   const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
 
-  // Get today's pending blocks that haven't started yet
+  // Get today's pending *scheduled* blocks that haven't started yet
   const pendingBlocks = state.blocks.filter(b => {
+    if (!b.start) return false; // skip pool blocks
     const isToday = b.date === today || (!b.date && b.days.includes(dayIdx));
     if (!isToday) return false;
     const status = state.getEffectiveStatus(b, today);
@@ -101,7 +102,6 @@ function showReorderSuggestion(energy: number): void {
     return;
   }
 
-  // Find the next pending block
   const nextBlock = pendingBlocks[0];
   const [eMin, eMax] = ENERGY_FIT[nextBlock.type];
   const isGoodFit = energy >= eMin && energy <= eMax;
@@ -111,7 +111,6 @@ function showReorderSuggestion(energy: number): void {
     return;
   }
 
-  // Find a better-fitting block among the remaining pending blocks
   const betterBlock = pendingBlocks.slice(1).find(b => {
     const [bMin, bMax] = ENERGY_FIT[b.type];
     return energy >= bMin && energy <= bMax;
@@ -129,7 +128,7 @@ function showReorderSuggestion(energy: number): void {
     <div class="reorder-suggestion-text">
       Your energy is ${valueToTier(energy)} right now.
       <strong>${esc(betterLabel)}</strong> (${fmtTime(betterBlock.start)}) might be a better fit —
-      swap it with <strong>${esc(nextLabel)}</strong> (${fmtTime(nextBlock.start)})?
+      swap with <strong>${esc(nextLabel)}</strong> (${fmtTime(nextBlock.start)})?
     </div>
     <div class="reorder-suggestion-actions">
       <button class="btn btn-primary" id="reorderAccept">Swap them</button>
@@ -137,14 +136,12 @@ function showReorderSuggestion(energy: number): void {
     </div>`;
   container.style.display = 'block';
 
-  // Capture IDs so the swap survives state.refresh() replacing block references
   const nextId = nextBlock.id;
   const betterId = betterBlock.id;
   const nextStart = nextBlock.start;
   const betterStart = betterBlock.start;
 
   $id('reorderAccept').addEventListener('click', async () => {
-    // Look up blocks by ID — references may be stale after a refresh
     const nextIdx = state.blocks.findIndex(b => b.id === nextId);
     const betterIdx = state.blocks.findIndex(b => b.id === betterId);
     if (nextIdx >= 0 && betterIdx >= 0) {
@@ -163,18 +160,89 @@ function showReorderSuggestion(energy: number): void {
   });
 }
 
-// --- Energy check-in toast ---
+// --- Energy check-in popup ---
 
-/** Show the energy check-in toast only during daytime hours. */
+let checkinOverlay: HTMLElement | null = null;
+
+/** Show a full-screen energy check-in if 1+ hour has passed since last log.
+ *  Only during daytime hours (9AM-9PM). */
+function maybeShowCheckinPopup(): void {
+  const h = new Date().getHours();
+  if (h < 9 || h >= 21) return;
+
+  const sinceLastLog = Date.now() - lastEnergyLogTime;
+  if (lastEnergyLogTime > 0 && sinceLastLog < CHECKIN_INTERVAL_MS) return;
+
+  showCheckinPopup();
+}
+
+function showCheckinPopup(): void {
+  if (checkinOverlay) return; // already showing
+
+  checkinOverlay = document.createElement('div');
+  checkinOverlay.className = 'checkin-popup-overlay';
+  checkinOverlay.innerHTML = `
+    <div class="checkin-popup">
+      <p class="checkin-popup-greeting">${getCheckinGreeting()}</p>
+      <p class="checkin-popup-question">How's your energy right now?</p>
+      <div class="checkin-popup-buttons">
+        <button class="checkin-popup-btn energy-low" data-tier="low">
+          <span class="checkin-popup-label">Low</span>
+          <span class="checkin-popup-desc">Foggy, tired, need easy wins</span>
+        </button>
+        <button class="checkin-popup-btn energy-med" data-tier="med">
+          <span class="checkin-popup-label">Med</span>
+          <span class="checkin-popup-desc">Some energy, want to move</span>
+        </button>
+        <button class="checkin-popup-btn energy-high" data-tier="high">
+          <span class="checkin-popup-label">High</span>
+          <span class="checkin-popup-desc">Focused, ready to go</span>
+        </button>
+      </div>
+      <button class="checkin-popup-skip">Skip for now</button>
+    </div>`;
+
+  document.body.appendChild(checkinOverlay);
+
+  checkinOverlay.querySelectorAll<HTMLElement>('[data-tier]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tier = btn.dataset.tier as EnergyTier;
+      dismissCheckinPopup();
+      setEnergyTier(tier);
+    });
+  });
+
+  checkinOverlay.querySelector('.checkin-popup-skip')!.addEventListener('click', () => {
+    dismissCheckinPopup();
+  });
+}
+
+function dismissCheckinPopup(): void {
+  if (checkinOverlay) {
+    checkinOverlay.remove();
+    checkinOverlay = null;
+  }
+  // Also hide the old toast if it's showing
+  const toast = $id('energyCheckinToast');
+  if (toast) toast.style.display = 'none';
+}
+
+function getCheckinGreeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
+// Keep old toast functions for notification-triggered check-ins
 function showCheckinToast(): void {
   const h = new Date().getHours();
-  if (h < 9 || h >= 21) return; // outside 9AM-9PM — don't interrupt
-  $id('energyCheckinToast').style.display = 'flex';
+  if (h < 9 || h >= 21) return;
+  showCheckinPopup(); // upgrade toast to popup
 }
 
 function hideCheckinToast(): void {
-  const toast = $id('energyCheckinToast');
-  if (toast) toast.style.display = 'none';
+  dismissCheckinPopup();
 }
 
 // --- Legal pages ---
@@ -315,11 +383,13 @@ async function onUserSignedIn(userId: string): Promise<void> {
   // Register push subscription (fire-and-forget)
   subscribeToPush(userId);
 
-  // Handle energy check-in opened from push notification URL
+  // Energy check-in popup on load (if 1+ hour since last log)
   const params = new URLSearchParams(window.location.search);
   if (params.get('action') === 'energy-checkin') {
-    showCheckinToast();
+    showCheckinPopup();
     history.replaceState(null, '', '/');
+  } else {
+    maybeShowCheckinPopup();
   }
 
   // Show sync dialog if there are calendar events to review
@@ -361,14 +431,8 @@ document.addEventListener('visibilitychange', async () => {
     lastEnergyLogTime = new Date(lastLog.logged_at).getTime();
   }
 
-  // Gentle nudge only when returning after a long absence
-  const awayMs = lastHiddenAt > 0 ? Date.now() - lastHiddenAt : 0;
-  const sinceLastLog = Date.now() - lastEnergyLogTime;
-  if (awayMs >= RETURN_NUDGE_MS && sinceLastLog >= RETURN_NUDGE_MS) {
-    showCheckinToast();
-  } else {
-    hideCheckinToast();
-  }
+  // Check-in popup on return if 1+ hour since last log
+  maybeShowCheckinPopup();
 
   // Re-render the active view
   renderTimeline();

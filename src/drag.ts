@@ -1,12 +1,11 @@
 import { state } from './state.js';
-import { $id, fmtTime, getTodayDate, getTodayIndex } from './utils.js';
+import { $id, fmtTime, isScheduled, getTodayDate, getTodayIndex } from './utils.js';
 import { renderTimeline } from './timeline.js';
 
 const LONG_PRESS_MS = 400;
-const MOVE_THRESHOLD = 8; // px movement allowed before cancelling long-press
+const MOVE_THRESHOLD = 8;
 const SNAP_MINUTES = 15;
 
-// Drag state
 let pressTimer: ReturnType<typeof setTimeout> | null = null;
 let dragging = false;
 let dragIndex = -1;
@@ -37,25 +36,23 @@ function snap(mins: number): number {
   return Math.round(mins / SNAP_MINUTES) * SNAP_MINUTES;
 }
 
-/** Measure px-per-minute from actual rendered timeline blocks. */
 function measurePxPerMinute(): void {
-  const timeBlocks = Array.from($id('timeline').querySelectorAll('.time-block'));
-  // Find two flow blocks with different start times
-  for (let i = 0; i < timeBlocks.length - 1; i++) {
-    const aCard = timeBlocks[i].querySelector('.block-card[data-index]') as HTMLElement | null;
-    const bCard = timeBlocks[i + 1].querySelector('.block-card[data-index]') as HTMLElement | null;
+  const commitmentItems = Array.from($id('commitmentsList').querySelectorAll('.commitment-item'));
+  for (let i = 0; i < commitmentItems.length - 1; i++) {
+    const aCard = commitmentItems[i].querySelector('.block-card[data-index]') as HTMLElement | null;
+    const bCard = commitmentItems[i + 1].querySelector('.block-card[data-index]') as HTMLElement | null;
     if (!aCard || !bCard) continue;
 
     const aIdx = parseInt(aCard.dataset.index!);
     const bIdx = parseInt(bCard.dataset.index!);
     const aBlock = state.blocks[aIdx];
     const bBlock = state.blocks[bIdx];
-    if (!aBlock || !bBlock) continue;
+    if (!aBlock || !bBlock || !aBlock.start || !bBlock.start) continue;
 
     const timeDiff = toMinutes(bBlock.start) - toMinutes(aBlock.start);
     if (timeDiff <= 0) continue;
 
-    const pxDiff = timeBlocks[i + 1].getBoundingClientRect().top - timeBlocks[i].getBoundingClientRect().top;
+    const pxDiff = commitmentItems[i + 1].getBoundingClientRect().top - commitmentItems[i].getBoundingClientRect().top;
     if (pxDiff > 0) {
       pxPerMinute = pxDiff / timeDiff;
       pxPerMinute = Math.max(0.5, Math.min(4, pxPerMinute));
@@ -66,7 +63,8 @@ function measurePxPerMinute(): void {
 
 function beginDrag(card: HTMLElement, clientY: number): void {
   const idx = parseInt(card.dataset.index!);
-  if (isNaN(idx) || !state.blocks[idx]) return;
+  const block = state.blocks[idx];
+  if (isNaN(idx) || !block || !isScheduled(block)) return;
 
   measurePxPerMinute();
 
@@ -74,14 +72,12 @@ function beginDrag(card: HTMLElement, clientY: number): void {
   dragIndex = idx;
   startY = clientY;
   lastY = clientY;
-  originalStartTime = state.blocks[idx].start;
+  originalStartTime = block.start;
   currentNewTime = originalStartTime;
 
-  // Dim the original
-  const timeBlock = card.closest('.time-block') as HTMLElement;
-  timeBlock.classList.add('dragging');
+  const commitmentItem = card.closest('.commitment-item') as HTMLElement;
+  commitmentItem.classList.add('dragging');
 
-  // Create ghost — fixed position copy of the card
   const rect = card.getBoundingClientRect();
   ghostEl = card.cloneNode(true) as HTMLElement;
   ghostEl.classList.add('drag-ghost');
@@ -91,7 +87,6 @@ function beginDrag(card: HTMLElement, clientY: number): void {
   ghostInitialTop = rect.top;
   document.body.appendChild(ghostEl);
 
-  // Floating time badge
   timeLabel = document.createElement('div');
   timeLabel.className = 'drag-time-indicator';
   timeLabel.textContent = fmtTime(originalStartTime);
@@ -109,20 +104,16 @@ function onMove(clientY: number): void {
   lastY = clientY;
   const deltaY = clientY - startY;
 
-  // Position ghost directly from initial position + delta
   ghostEl.style.top = `${ghostInitialTop + deltaY}px`;
 
-  // Calculate new snapped time
   const deltaMin = deltaY / pxPerMinute;
   const newMin = snap(toMinutes(originalStartTime) + deltaMin);
   currentNewTime = fromMinutes(newMin);
 
-  // Update badge
   timeLabel.textContent = fmtTime(currentNewTime);
   timeLabel.style.top = `${ghostInitialTop + deltaY - 30}px`;
 }
 
-/** Find the flow block whose time range the new time falls into. */
 function findBlockAtTime(newTime: string, excludeIndex: number): number {
   const today = getTodayDate();
   const dayIndex = getTodayIndex();
@@ -131,8 +122,8 @@ function findBlockAtTime(newTime: string, excludeIndex: number): number {
   for (let i = 0; i < state.blocks.length; i++) {
     if (i === excludeIndex) continue;
     const b = state.blocks[i];
+    if (!isScheduled(b)) continue;
 
-    // Only consider blocks active today
     const isToday = b.date ? b.date === today : b.days.includes(dayIndex);
     if (!isToday) continue;
 
@@ -158,16 +149,13 @@ async function endDrag(): Promise<void> {
   const draggedBlock = state.blocks[savedDragIndex];
   if (!draggedBlock) return;
 
-  // Check if we're dropping onto another block — if so, swap times
   const targetIndex = findBlockAtTime(newTime, savedDragIndex);
 
   if (targetIndex >= 0) {
     const targetBlock = state.blocks[targetIndex];
-    // Swap: target gets the dragged block's old time, dragged gets target's time
     await state.updateBlock(savedDragIndex, { ...draggedBlock, start: targetBlock.start }, 'drag');
     await state.updateBlock(targetIndex, { ...targetBlock, start: originalStartTime }, 'drag');
   } else {
-    // No overlap — just move to the new time
     await state.updateBlock(savedDragIndex, { ...draggedBlock, start: newTime }, 'drag');
   }
 
@@ -188,11 +176,11 @@ function cancelPress(): void {
 }
 
 export function initDragAndDrop(): void {
-  const timeline = $id('timeline');
+  const dayView = $id('day-view');
 
-  // --- Pointer events (mouse + touch on most browsers) ---
-  timeline.addEventListener('pointerdown', (e: PointerEvent) => {
-    const card = (e.target as HTMLElement).closest('.block-card') as HTMLElement | null;
+  // Only allow dragging on commitment cards (pinned blocks), not pool cards
+  dayView.addEventListener('pointerdown', (e: PointerEvent) => {
+    const card = (e.target as HTMLElement).closest('.commitment-item .block-card') as HTMLElement | null;
     if (!card || card.classList.contains('calendar-event')) return;
     if ((e.target as HTMLElement).closest('[data-action]')) return;
 
@@ -209,7 +197,6 @@ export function initDragAndDrop(): void {
       e.preventDefault();
       onMove(e.clientY);
     } else if (pressTimer) {
-      // Cancel long-press if finger/mouse moved too far
       const dx = e.clientX - pressStartX;
       const dy = e.clientY - pressStartY;
       if (Math.sqrt(dx * dx + dy * dy) > MOVE_THRESHOLD) {
@@ -227,8 +214,7 @@ export function initDragAndDrop(): void {
     cleanup();
   });
 
-  // --- Touch fallback for iOS ---
-  timeline.addEventListener('touchmove', (e: TouchEvent) => {
+  dayView.addEventListener('touchmove', (e: TouchEvent) => {
     if (dragging) {
       e.preventDefault();
       onMove(e.touches[0].clientY);
@@ -244,8 +230,7 @@ export function initDragAndDrop(): void {
     cleanup();
   });
 
-  // --- Right-click context prevention during drag ---
-  timeline.addEventListener('contextmenu', (e) => {
+  dayView.addEventListener('contextmenu', (e) => {
     if (dragging) e.preventDefault();
   });
 }

@@ -212,7 +212,7 @@ class AppState {
       type: block.type,
       title: block.title,
       menu: block.menu,
-      start_time: block.start,
+      start_time: block.start || null, // null = pool (unscheduled)
       duration: block.duration,
       days: block.days,
       block_date: block.date,
@@ -259,7 +259,7 @@ class AppState {
         type: block.type,
         title: block.title,
         menu: block.menu,
-        start_time: block.start,
+        start_time: block.start || null,
         duration: block.duration,
         days: block.days,
         block_date: block.date,

@@ -1,10 +1,13 @@
 import { state } from './state.js';
-import { DAYS, BlockType, FlowBlock, fmtTime, addMinutes, $id, getTodayIndex, getTodayDate, getDateForDayIndex, TYPE_LABELS, TYPE_DESCRIPTIONS, BLOCK_TYPE_KEYWORDS, BLOCK_MENU_SUGGESTIONS, esc } from './utils.js';
+import { DAYS, BlockType, FlowBlock, fmtTime, addMinutes, isScheduled, $id, getTodayIndex, getTodayDate, getDateForDayIndex, TYPE_LABELS, TYPE_DESCRIPTIONS, BLOCK_TYPE_KEYWORDS, BLOCK_MENU_SUGGESTIONS, esc } from './utils.js';
 import { renderTimeline } from './timeline.js';
 import { renderWeek } from './week.js';
 import { confirmDelete } from './confirm-delete.js';
 
-let scheduleMode: 'today' | 'recurring' = 'today';
+type PlacementMode = 'pool' | 'pinned';
+type ScheduleMode = 'today' | 'recurring';
+let placementMode: PlacementMode = 'pool';
+let scheduleMode: ScheduleMode = 'today';
 let suggestTimeout: ReturnType<typeof setTimeout> | null = null;
 
 /** Suggest a block type based on title keywords and user history. */
@@ -39,7 +42,14 @@ function populateTimeOptions(): void {
   }
 }
 
-function setScheduleMode(mode: 'today' | 'recurring'): void {
+function setPlacementMode(mode: PlacementMode): void {
+  placementMode = mode;
+  $id('schedPool').classList.toggle('selected', mode === 'pool');
+  $id('schedPinned').classList.toggle('selected', mode === 'pinned');
+  $id('pinnedOptions').style.display = mode === 'pinned' ? 'block' : 'none';
+}
+
+function setScheduleMode(mode: ScheduleMode): void {
   scheduleMode = mode;
   $id('schedToday').classList.toggle('selected', mode === 'today');
   $id('schedRecurring').classList.toggle('selected', mode === 'recurring');
@@ -59,7 +69,7 @@ export function openModal(index = -1): void {
   $id('typeDescription').textContent = '';
 
   $id('deleteBtn').style.display = index >= 0 ? 'block' : 'none';
-  $id('modalTitle').textContent = index >= 0 ? 'Edit Block' : 'Add Block';
+  $id('modalTitle').textContent = index >= 0 ? 'Edit' : 'Add something';
 
   const titleInput = $id('blockTitle') as HTMLInputElement;
   const menuInput = $id('blockMenu') as HTMLTextAreaElement;
@@ -75,16 +85,24 @@ export function openModal(index = -1): void {
     $id('typeDescription').textContent = TYPE_DESCRIPTIONS[b.type] || '';
     titleInput.value = b.title;
     menuInput.value = b.menu.join('\n');
-    startSelect.value = b.start;
     durationSelect.value = String(b.duration);
 
-    // Determine mode from existing block
-    if (b.date) {
-      ($id('blockDate') as HTMLInputElement).value = b.date;
-      setScheduleMode('today');
+    // Determine placement mode from existing block
+    if (isScheduled(b)) {
+      startSelect.value = b.start;
+      setPlacementMode('pinned');
+      if (b.date) {
+        ($id('blockDate') as HTMLInputElement).value = b.date;
+        setScheduleMode('today');
+      } else {
+        ($id('blockDate') as HTMLInputElement).value = getTodayDate();
+        setScheduleMode('recurring');
+      }
     } else {
+      setPlacementMode('pool');
+      startSelect.value = '09:00';
       ($id('blockDate') as HTMLInputElement).value = getTodayDate();
-      setScheduleMode('recurring');
+      setScheduleMode('today');
     }
   } else {
     state.selectedDays = [getTodayIndex()];
@@ -93,12 +111,12 @@ export function openModal(index = -1): void {
     startSelect.value = '09:00';
     durationSelect.value = '60';
     ($id('blockDate') as HTMLInputElement).value = getTodayDate();
+    setPlacementMode('pool');
     setScheduleMode('today');
   }
 
   renderDayPickers();
   renderTypeSelection();
-  // Show menu suggestions if editing a block with a known type
   if (state.selectedType) {
     renderMenuSuggestions(state.selectedType as BlockType);
   } else {
@@ -114,13 +132,14 @@ export function openModalForSlot(dayIdx: number, hour: string): void {
   $id('typeDescription').textContent = '';
 
   $id('deleteBtn').style.display = 'none';
-  $id('modalTitle').textContent = 'Add Block';
+  $id('modalTitle').textContent = 'Add something';
   ($id('blockTitle') as HTMLInputElement).value = '';
   ($id('blockMenu') as HTMLTextAreaElement).value = '';
   populateTimeOptions();
   ($id('blockStart') as HTMLSelectElement).value = hour;
   ($id('blockDuration') as HTMLSelectElement).value = '60';
 
+  setPlacementMode('pinned');
   setScheduleMode('recurring');
   renderDayPickers();
   renderTypeSelection();
@@ -146,7 +165,6 @@ function renderMenuSuggestions(type: BlockType): void {
   const menuInput = $id('blockMenu') as HTMLTextAreaElement;
   const currentItems = menuInput.value.split('\n').map(s => s.trim().toLowerCase()).filter(Boolean);
 
-  // Get user's past menu items for this block type (deduplicated)
   const pastItems = new Set<string>();
   for (const block of state.blocks) {
     if (block.type === type && block.menu) {
@@ -158,7 +176,6 @@ function renderMenuSuggestions(type: BlockType): void {
     }
   }
 
-  // Combine: user's past items first, then defaults (skip duplicates and already-added items)
   const suggestions: string[] = [];
   const seen = new Set<string>();
 
@@ -195,7 +212,6 @@ function addMenuSuggestion(item: string): void {
   const menuInput = $id('blockMenu') as HTMLTextAreaElement;
   const current = menuInput.value.trim();
   menuInput.value = current ? current + '\n' + item : item;
-  // Re-render to remove the added chip
   const type = (state.selectedType || suggestedType) as BlockType;
   if (type) renderMenuSuggestions(type);
 }
@@ -214,7 +230,6 @@ function onTitleInput(): void {
   suggestTimeout = setTimeout(() => {
     const title = ($id('blockTitle') as HTMLInputElement).value.trim();
     suggestedType = title.length >= 2 ? suggestBlockType(title) : null;
-    // Only show suggestion highlight and menu suggestions if user hasn't manually picked a type yet
     if (!state.selectedType) {
       renderTypeSelection();
       if (suggestedType) {
@@ -249,16 +264,17 @@ function toMinutes(t: string): number {
 }
 
 function findOverlap(start: string, duration: number, days: number[], date: string | null): FlowBlock | null {
+  if (!start) return null; // pool blocks can't overlap
+
   const newStart = toMinutes(start);
   const newEnd = newStart + duration;
-
   const today = getTodayDate();
 
   for (let i = 0; i < state.blocks.length; i++) {
     if (i === state.editingIndex) continue;
     const b = state.blocks[i];
+    if (!isScheduled(b)) continue; // skip pool blocks
 
-    // Skip blocks dismissed for the relevant date
     const checkDate = date || today;
     if (state.getEffectiveStatus(b, checkDate) === 'dismissed') continue;
 
@@ -267,24 +283,20 @@ function findOverlap(start: string, duration: number, days: number[], date: stri
 
     if (newStart >= bEnd || newEnd <= bStart) continue;
 
-    // Time ranges overlap — check if they share any day
     if (date && b.date) {
       if (date === b.date) return b;
     } else if (date) {
-      // New one-off vs existing recurring: only conflict if the date is >= existing block's creation
       const d = new Date(date + 'T00:00:00');
       const dayIdx = d.getDay() === 0 ? 6 : d.getDay() - 1;
       if (b.days.includes(dayIdx)) {
         if (!b.created_at || date >= b.created_at.slice(0, 10)) return b;
       }
     } else if (b.date) {
-      // New recurring vs existing one-off: ignore past one-off blocks
       if (b.date < today) continue;
       const d = new Date(b.date + 'T00:00:00');
       const dayIdx = d.getDay() === 0 ? 6 : d.getDay() - 1;
       if (days.includes(dayIdx)) return b;
     } else {
-      // Both recurring: only conflict on days from today forward
       if (days.some(d => b.days.includes(d))) return b;
     }
   }
@@ -292,36 +304,47 @@ function findOverlap(start: string, duration: number, days: number[], date: stri
 }
 
 async function saveBlock(): Promise<void> {
-  // Use suggested type if user didn't explicitly pick one
   const effectiveType = state.selectedType || suggestedType;
   if (!effectiveType) {
-    alert('Pick a block type!');
+    alert('Pick an energy type!');
     return;
   }
 
-  const isOneOff = scheduleMode === 'today';
+  let start = '';
+  let days: number[] = [];
+  let date: string | null = null;
 
-  if (!isOneOff && state.selectedDays.length === 0) {
-    alert('Select at least one day!');
-    return;
+  if (placementMode === 'pinned') {
+    start = ($id('blockStart') as HTMLSelectElement).value;
+    const isOneOff = scheduleMode === 'today';
+
+    if (!isOneOff && state.selectedDays.length === 0) {
+      alert('Select at least one day!');
+      return;
+    }
+
+    const dateVal = ($id('blockDate') as HTMLInputElement).value;
+    date = isOneOff ? dateVal : null;
+    days = isOneOff ? [] : state.selectedDays;
+
+    const duration = parseInt(($id('blockDuration') as HTMLSelectElement).value);
+    const overlap = findOverlap(start, duration, days, date);
+    if (overlap) {
+      const label = overlap.title || overlap.type;
+      const end = addMinutes(overlap.start, overlap.duration);
+      alert(`Overlaps with "${label}" (${fmtTime(overlap.start)} – ${fmtTime(end)})`);
+      return;
+    }
+  } else {
+    // Pool block: no start time, no date — persists until completed or removed
+    start = '';
+    date = null;
+    days = [];
   }
 
-  const start = ($id('blockStart') as HTMLSelectElement).value;
   const duration = parseInt(($id('blockDuration') as HTMLSelectElement).value);
-  const dateVal = ($id('blockDate') as HTMLInputElement).value;
-  const pickedDate = isOneOff ? dateVal : null;
-  const days = isOneOff ? [] : state.selectedDays;
-  const date = pickedDate;
 
-  const overlap = findOverlap(start, duration, days, date);
-  if (overlap) {
-    const label = overlap.title || overlap.type;
-    const end = addMinutes(overlap.start, overlap.duration);
-    alert(`Overlaps with "${label}" (${fmtTime(overlap.start)} – ${fmtTime(end)})`);
-    return;
-  }
-
-  const block = {
+  const block: FlowBlock = {
     type: effectiveType as BlockType,
     title: ($id('blockTitle') as HTMLInputElement).value.trim(),
     menu: ($id('blockMenu') as HTMLTextAreaElement).value
@@ -354,7 +377,7 @@ async function deleteBlock(): Promise<void> {
   const name = block.title || TYPE_LABELS[block.type] + ' block';
   const choice = await confirmDelete(name, isRecurring);
 
-  if (!choice) return; // cancelled
+  if (!choice) return;
 
   if (choice === 'this') {
     await state.updateBlockStatus(state.editingIndex, 'dismissed');
@@ -376,6 +399,11 @@ export function initModalEvents(): void {
     btn.addEventListener('click', () => selectType(btn.dataset.type!));
   });
 
+  // Placement mode: pool vs pinned
+  $id('schedPool').addEventListener('click', () => setPlacementMode('pool'));
+  $id('schedPinned').addEventListener('click', () => setPlacementMode('pinned'));
+
+  // Schedule sub-mode: one-off vs recurring (only visible when pinned)
   $id('schedToday').addEventListener('click', () => setScheduleMode('today'));
   $id('schedRecurring').addEventListener('click', () => setScheduleMode('recurring'));
 
@@ -384,10 +412,8 @@ export function initModalEvents(): void {
     if (btn) toggleDay(parseInt(btn.dataset.dayPick!));
   });
 
-  // Title input for block type suggestion
   $id('blockTitle').addEventListener('input', onTitleInput);
 
-  // Menu suggestion chips
   $id('menuSuggestions').addEventListener('click', (e) => {
     const chip = (e.target as HTMLElement).closest('[data-menu-item]') as HTMLElement | null;
     if (chip) addMenuSuggestion(chip.dataset.menuItem!);
