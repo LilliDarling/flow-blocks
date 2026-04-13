@@ -303,6 +303,39 @@ serve(async () => {
     }
   }
 
+  // --- Daily end-of-day review nudge ---
+  // Send once per user at ~8 PM local time to encourage reviewing the day.
+
+  const NUDGE_HOUR = 20; // 8 PM local time
+
+  for (const [userId, userSubs] of subsByUser) {
+    const tz = userSubs[0].timezone || 'UTC';
+    const localDate = now.toLocaleDateString('en-CA', { timeZone: tz });
+    const nowMinutes = localMinutesSinceMidnight(now, tz);
+    const nudgeMinutes = NUDGE_HOUR * 60;
+
+    const diff = nudgeMinutes - nowMinutes;
+    if (diff < -5 || diff > 5) continue;
+
+    // Dedup: one nudge per user per day
+    const { error: dedupErr } = await supabase
+      .from('daily_nudge_log')
+      .insert({ user_id: userId, nudge_date: localDate });
+
+    if (dedupErr) continue; // already sent today
+
+    const payload = JSON.stringify({
+      title: "How'd today go?",
+      body: 'Take a sec to check off what you got done.',
+      icon: '/icons/icon.png',
+      tag: 'daily-review',
+      url: '/',
+      type: 'daily-review',
+    });
+
+    sent += await sendToAll(userSubs, payload);
+  }
+
   return new Response(JSON.stringify({ sent }), {
     headers: { 'Content-Type': 'application/json' },
   });

@@ -90,7 +90,7 @@ function renderCommitments(blocks: CommitmentItem[], today: string): void {
 
 function renderCommitmentBlock(block: FlowBlock, realIndex: number, today: string, energy: number): string {
   const endTime = addMinutes(block.start, block.duration);
-  const menuHtml = block.menu.length
+  const menuHtml = block.menu.length > 1
     ? block.menu.map(m => `<span>${esc(m)}</span>`).join('')
     : '';
   const effectiveStatus: BlockStatus = state.getEffectiveStatus(block, today);
@@ -186,7 +186,7 @@ function renderPool(blocks: { block: FlowBlock; index: number }[], today: string
     const energyClass = effectiveStatus !== 'pending' ? '' :
       (energy >= eMin && energy <= eMax) ? 'energy-match' : 'energy-dim';
 
-    const menuHtml = block.menu.length
+    const menuHtml = block.menu.length > 1
       ? `<div class="pool-card-menu">${block.menu.map(m => `<span>${esc(m)}</span>`).join('')}</div>`
       : '';
 

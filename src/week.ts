@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { DAYS, TYPE_LABELS, getTodayIndex, getTodayDate, getDateForDayIndex, FlowBlock, isScheduled, $id, esc } from './utils.js';
+import { DAYS, TYPE_LABELS, getTodayIndex, getTodayDate, getDateForDayIndex, FlowBlock, isScheduled, fmtTime, $id, esc } from './utils.js';
 import { openModal, openModalForSlot } from './modal.js';
 import type { CalendarEvent } from './calendar/types.js';
 
@@ -11,9 +11,7 @@ const COL_HEIGHT = TOTAL_HOURS * HOUR_H;
 
 function blockVisibleOnDay(b: FlowBlock, dayIdx: number): boolean {
   if (b.date) {
-    const d = new Date(b.date + 'T00:00:00');
-    const idx = d.getDay() === 0 ? 6 : d.getDay() - 1;
-    return idx === dayIdx;
+    return b.date === getDateForDayIndex(dayIdx);
   }
   if (!b.days.includes(dayIdx)) return false;
   // Recurring blocks only show from their creation date forward
@@ -127,7 +125,7 @@ export function renderWeek(): void {
           <div class="week-cell-label">${esc(item.block.title || TYPE_LABELS[item.block.type])}</div>
         </div>`;
       } else if (item.calEvent) {
-        html += `<div class="week-block calendar-event cal-color-${item.calColorIdx}" style="top:${top}px;height:${height}px;left:${left}%;width:${width}%">
+        html += `<div class="week-block calendar-event cal-color-${item.calColorIdx}" data-cal-title="${esc(item.calEvent.title)}" data-cal-start="${item.calEvent.start}" data-cal-end="${item.calEvent.end}" data-cal-duration="${item.calEvent.duration}" data-cal-provider="${esc(item.calEvent.provider)}" style="top:${top}px;height:${height}px;left:${left}%;width:${width}%">
           <div class="week-cell-label">${esc(item.calEvent.title)}</div>
         </div>`;
       }
@@ -139,18 +137,78 @@ export function renderWeek(): void {
   grid.innerHTML = html;
 }
 
+function closeCalPopover(): void {
+  const existing = document.querySelector('.week-cal-popover');
+  if (existing) existing.remove();
+}
+
+function showCalPopover(el: HTMLElement): void {
+  closeCalPopover();
+  const title = el.dataset.calTitle || '';
+  const start = el.dataset.calStart || '';
+  const end = el.dataset.calEnd || '';
+  const duration = el.dataset.calDuration || '';
+  const provider = el.dataset.calProvider || '';
+
+  const pop = document.createElement('div');
+  pop.className = 'week-cal-popover';
+  pop.innerHTML = `
+    <div class="week-cal-popover-title">${esc(title)}</div>
+    <div class="week-cal-popover-time">${fmtTime(start)} – ${fmtTime(end)} · ${duration} min</div>
+    <div class="week-cal-popover-source">from ${esc(provider)} calendar</div>`;
+
+  // Position near the clicked element
+  const rect = el.getBoundingClientRect();
+  pop.style.position = 'fixed';
+  pop.style.top = `${rect.top}px`;
+  pop.style.left = `${rect.right + 8}px`;
+
+  document.body.appendChild(pop);
+
+  // If it overflows right, flip to left side
+  const popRect = pop.getBoundingClientRect();
+  if (popRect.right > window.innerWidth - 8) {
+    pop.style.left = `${rect.left - popRect.width - 8}px`;
+  }
+  // If it overflows bottom, shift up
+  if (popRect.bottom > window.innerHeight - 8) {
+    pop.style.top = `${window.innerHeight - popRect.height - 8}px`;
+  }
+}
+
 export function initWeekEvents(): void {
-  $id('weekGrid').addEventListener('dblclick', (e) => {
-    const el = (e.target as HTMLElement).closest('[data-block-index]') as HTMLElement | null;
-    if (el && el.dataset.blockIndex) {
-      openModal(parseInt(el.dataset.blockIndex));
+  $id('weekGrid').addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+
+    // Block click → open edit modal
+    const blockEl = target.closest('[data-block-index]') as HTMLElement | null;
+    if (blockEl && blockEl.dataset.blockIndex) {
+      closeCalPopover();
+      openModal(parseInt(blockEl.dataset.blockIndex));
+      return;
+    }
+
+    // Calendar event click → show detail popover
+    const calEl = target.closest('.calendar-event[data-cal-title]') as HTMLElement | null;
+    if (calEl) {
+      showCalPopover(calEl);
+      return;
+    }
+
+    closeCalPopover();
+
+    // Hour slot click → create new block
+    const slot = target.closest('.week-hour-slot') as HTMLElement | null;
+    if (slot && slot.dataset.day && slot.dataset.hour) {
+      openModalForSlot(parseInt(slot.dataset.day), slot.dataset.hour);
     }
   });
 
-  $id('weekGrid').addEventListener('click', (e) => {
-    const slot = (e.target as HTMLElement).closest('.week-hour-slot') as HTMLElement | null;
-    if (slot && slot.dataset.day && slot.dataset.hour) {
-      openModalForSlot(parseInt(slot.dataset.day), slot.dataset.hour);
+  // Close popover when clicking outside the grid
+  document.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    if (!target.closest('.week-cal-popover') && !target.closest('.calendar-event[data-cal-title]')) {
+      closeCalPopover();
     }
   });
 }

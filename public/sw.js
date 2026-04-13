@@ -62,6 +62,8 @@ self.addEventListener('notificationclick', (e) => {
             client.postMessage({ type: 'ENERGY_CHECKIN' });
           } else if (type === 'pomo-complete') {
             client.postMessage({ type: 'POMO_COMPLETE' });
+          } else if (type === 'daily-review') {
+            client.postMessage({ type: 'DAILY_REVIEW' });
           }
           return client.focus();
         }

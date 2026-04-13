@@ -104,6 +104,37 @@
   text-overflow: ellipsis;
 }
 
+/* Calendar event detail popover */
+.week-cal-popover {
+  z-index: 100;
+  background: var(--surface2);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  border-radius: 8px;
+  padding: 12px 14px;
+  min-width: 180px;
+  max-width: 260px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.week-cal-popover-title {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.week-cal-popover-time {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+}
+
+.week-cal-popover-source {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  opacity: 0.7;
+}
+
 @media (max-width: 768px) {
   .week-grid { grid-template-columns: 50px repeat(7, 1fr); font-size: 0.65rem; }
   .week-cell-label { font-size: 0.6rem; }

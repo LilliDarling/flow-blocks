@@ -383,14 +383,12 @@ async function onUserSignedIn(userId: string): Promise<void> {
   // Register push subscription (fire-and-forget)
   subscribeToPush(userId);
 
-  // Energy check-in popup on load (if 1+ hour since last log)
+  // Energy check-in popup on load — always prompt on a fresh app open
   const params = new URLSearchParams(window.location.search);
   if (params.get('action') === 'energy-checkin') {
-    showCheckinPopup();
     history.replaceState(null, '', '/');
-  } else {
-    maybeShowCheckinPopup();
   }
+  showCheckinPopup();
 
   // Show sync dialog if there are calendar events to review
   if (state.calendarEvents.length > 0) {
@@ -447,6 +445,8 @@ navigator.serviceWorker?.addEventListener('message', (e) => {
     showCheckinToast();
   } else if (e.data?.type === 'POMO_COMPLETE') {
     switchTab('pomo');
+  } else if (e.data?.type === 'DAILY_REVIEW') {
+    switchTab('day');
   }
 });
 
