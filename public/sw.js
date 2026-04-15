@@ -38,35 +38,63 @@ self.addEventListener('push', (e) => {
   let data;
   try { data = e.data.json(); } catch { data = { title: 'Wildbloom', body: e.data.text() }; }
 
-  e.waitUntil(
-    self.registration.showNotification(data.title || 'Wildbloom', {
-      body: data.body || '',
-      icon: data.icon || '/icons/icon.png',
-      tag: data.tag || 'reminder',
-      data: { url: data.url || '/', type: data.type || 'reminder' },
-    })
-  );
+  const options = {
+    body: data.body || '',
+    icon: data.icon || '/icons/icon.png',
+    tag: data.tag || 'reminder',
+    data: { url: data.url || '/', type: data.type || 'reminder', blockId: data.blockId || null },
+  };
+
+  // Add action buttons for block-complete notifications
+  if (data.type === 'block-complete' && data.blockId) {
+    options.actions = [
+      { action: 'complete', title: 'Done!' },
+      { action: 'skip', title: 'Not today' },
+    ];
+  }
+
+  e.waitUntil(self.registration.showNotification(data.title || 'Wildbloom', options));
 });
 
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
   const url = e.notification.data?.url || '/';
   const type = e.notification.data?.type || 'reminder';
+  const blockId = e.notification.data?.blockId || null;
+  const action = e.action; // 'complete', 'skip', or '' (body click)
 
   e.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      // Try to find an existing app window
       for (const client of windowClients) {
         if (client.url.includes(self.location.origin) && 'focus' in client) {
-          // Tell the app what kind of notification was clicked
-          if (type === 'energy-checkin') {
+          // Quick-complete / skip from notification action button
+          if (action === 'complete' && blockId) {
+            client.postMessage({ type: 'QUICK_COMPLETE', blockId });
+          } else if (action === 'skip' && blockId) {
+            client.postMessage({ type: 'QUICK_SKIP', blockId });
+          } else if (type === 'energy-checkin') {
             client.postMessage({ type: 'ENERGY_CHECKIN' });
           } else if (type === 'pomo-complete') {
             client.postMessage({ type: 'POMO_COMPLETE' });
           } else if (type === 'daily-review') {
             client.postMessage({ type: 'DAILY_REVIEW' });
+          } else if (type === 'block-complete' && blockId) {
+            // Body click on a block-complete notification
+            client.postMessage({ type: 'QUICK_COMPLETE', blockId });
+          } else if (type === 'block-start') {
+            client.postMessage({ type: 'DAILY_REVIEW' });
           }
           return client.focus();
         }
+      }
+
+      // No window open — open app with action query param if applicable
+      if (blockId && (action === 'complete' || type === 'block-complete')) {
+        return clients.openWindow('/?action=complete-block&blockId=' + blockId);
+      }
+      if (blockId && action === 'skip') {
+        return clients.openWindow('/?action=skip-block&blockId=' + blockId);
       }
       return clients.openWindow(url);
     })

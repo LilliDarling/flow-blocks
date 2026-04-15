@@ -910,6 +910,73 @@ class AppState {
     return suggestions;
   }
 
+  // --- Streak ---
+
+  private _streakCache: { value: number; computedAt: number } | null = null;
+
+  async computeStreak(): Promise<number> {
+    // Return cached value if computed in the last 5 minutes
+    if (this._streakCache && Date.now() - this._streakCache.computedAt < 5 * 60 * 1000) {
+      return this._streakCache.value;
+    }
+    if (!this.userId) return 0;
+
+    const since = new Date();
+    since.setDate(since.getDate() - 60);
+    const sinceStr = since.toISOString().slice(0, 10);
+
+    const blockIds = this.blocks.filter(b => b.id).map(b => b.id!);
+
+    // Fetch dates with block completions
+    const { data: completionRows } = blockIds.length > 0
+      ? await supabase
+          .from('block_completions')
+          .select('completion_date')
+          .in('block_id', blockIds)
+          .gte('completion_date', sinceStr)
+          .eq('status', 'done')
+      : { data: [] };
+
+    // Fetch dates with energy logs
+    const { data: energyRows } = await supabase
+      .from('energy_logs')
+      .select('logged_at')
+      .eq('user_id', this.userId)
+      .gte('logged_at', since.toISOString());
+
+    const activeDates = new Set<string>();
+    for (const row of (completionRows || []) as { completion_date: string }[]) {
+      activeDates.add(row.completion_date);
+    }
+    for (const row of (energyRows || []) as { logged_at: string }[]) {
+      activeDates.add(row.logged_at.slice(0, 10));
+    }
+    // One-off blocks marked done
+    for (const b of this.blocks) {
+      if (b.date && b.status === 'done') activeDates.add(b.date);
+    }
+
+    // Count consecutive days backwards from today
+    let streak = 0;
+    const d = new Date();
+    while (true) {
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      if (activeDates.has(dateStr)) {
+        streak++;
+        d.setDate(d.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+
+    this._streakCache = { value: streak, computedAt: Date.now() };
+    return streak;
+  }
+
+  invalidateStreakCache(): void {
+    this._streakCache = null;
+  }
+
   // --- UI ---
 
   showSaveBanner(): void {

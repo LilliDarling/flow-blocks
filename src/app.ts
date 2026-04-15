@@ -3,7 +3,7 @@ import { state } from './state.js';
 import {
   $id, EnergyTier, ENERGY_TIER_VALUE, ENERGY_FIT,
   energySuggestion, valueToTier, fmtTime, addMinutes, getTodayIndex, getTodayDate,
-  FlowBlock, TYPE_LABELS, esc,
+  FlowBlock, TYPE_LABELS, isScheduled, esc,
 } from './utils.js';
 import { renderTimeline, initTimelineEvents } from './timeline.js';
 import { renderWeek, initWeekEvents } from './week.js';
@@ -75,7 +75,58 @@ function setEnergyTier(tier: EnergyTier, log = true): void {
     lastEnergyLogTime = Date.now();
     hideCheckinToast();
     showReorderSuggestion(value);
+    showPoolPrompt(value);
   }
+}
+
+// --- Pool prompt after energy check-in ---
+
+function showPoolPrompt(energy: number): void {
+  // Find pool blocks that match the current energy level
+  const matches = state.blocks.filter(b => {
+    if (isScheduled(b)) return false;
+    if (b.status === 'done' || b.status === 'skipped') return false;
+    const [eMin, eMax] = ENERGY_FIT[b.type];
+    return energy >= eMin && energy <= eMax;
+  });
+  if (matches.length === 0) return;
+
+  // Pick the first match to highlight
+  const top = matches[0];
+  const label = top.title || TYPE_LABELS[top.type];
+  const others = matches.length - 1;
+  const suffix = others > 0 ? ` and ${others} more` : '';
+
+  const prompt = document.createElement('div');
+  prompt.className = 'pool-prompt-overlay';
+  prompt.innerHTML = `
+    <div class="pool-prompt">
+      <p class="pool-prompt-text">
+        <strong>${esc(label)}</strong>${esc(suffix)} in your pool ${matches.length === 1 ? 'fits' : 'fit'} your energy right now.
+      </p>
+      <div class="pool-prompt-actions">
+        <button class="btn btn-primary pool-prompt-go">Show me</button>
+        <button class="btn btn-ghost pool-prompt-dismiss">Later</button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(prompt);
+
+  prompt.querySelector('.pool-prompt-go')!.addEventListener('click', () => {
+    prompt.remove();
+    switchTab('day');
+    // Scroll to pool section
+    const pool = $id('poolSection');
+    if (pool) pool.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
+  prompt.querySelector('.pool-prompt-dismiss')!.addEventListener('click', () => {
+    prompt.remove();
+  });
+
+  prompt.addEventListener('click', (e) => {
+    if (e.target === prompt) prompt.remove();
+  });
 }
 
 // --- Reorder suggestion (only for pinned/scheduled blocks) ---
@@ -245,6 +296,42 @@ function hideCheckinToast(): void {
   dismissCheckinPopup();
 }
 
+// --- Quick complete / skip from notifications ---
+
+async function handleQuickComplete(blockId: string): Promise<void> {
+  const idx = state.blocks.findIndex(b => b.id === blockId);
+  if (idx < 0) return;
+  const block = state.blocks[idx];
+  const title = block.title || TYPE_LABELS[block.type] + ' block';
+  await state.updateBlockStatus(idx, 'done');
+  await state.addDoneItem(title, undefined, blockId);
+  state.invalidateStreakCache();
+  renderTimeline();
+  renderWeek();
+}
+
+async function handleQuickSkip(blockId: string): Promise<void> {
+  const idx = state.blocks.findIndex(b => b.id === blockId);
+  if (idx < 0) return;
+  await state.updateBlockStatus(idx, 'skipped');
+  renderTimeline();
+  renderWeek();
+}
+
+// --- Streak ---
+
+async function renderStreak(): Promise<void> {
+  const badge = $id('streakBadge');
+  if (!badge) return;
+  const streak = await state.computeStreak();
+  if (streak < 2) {
+    badge.style.display = 'none';
+    return;
+  }
+  badge.style.display = '';
+  badge.innerHTML = `<span class="streak-count">${streak}-day streak</span> — keep it going`;
+}
+
 // --- Legal pages ---
 
 function initLegalLinks(): void {
@@ -383,17 +470,31 @@ async function onUserSignedIn(userId: string): Promise<void> {
   // Register push subscription (fire-and-forget)
   subscribeToPush(userId);
 
-  // Energy check-in popup on load — always prompt on a fresh app open
+  // Handle notification action query params (when app wasn't open)
   const params = new URLSearchParams(window.location.search);
-  if (params.get('action') === 'energy-checkin') {
+  const qAction = params.get('action');
+  const qBlockId = params.get('blockId');
+
+  if (qAction === 'complete-block' && qBlockId) {
+    handleQuickComplete(qBlockId);
+    history.replaceState(null, '', '/');
+  } else if (qAction === 'skip-block' && qBlockId) {
+    handleQuickSkip(qBlockId);
+    history.replaceState(null, '', '/');
+  } else if (qAction === 'energy-checkin') {
     history.replaceState(null, '', '/');
   }
+
+  // Energy check-in popup on load — always prompt on a fresh app open
   showCheckinPopup();
 
   // Show sync dialog if there are calendar events to review
   if (state.calendarEvents.length > 0) {
     showCalendarSyncDialog();
   }
+
+  // Render streak badge (fire-and-forget, doesn't block load)
+  renderStreak();
 }
 
 // Track when app goes hidden for away-duration calculation
@@ -437,6 +538,8 @@ document.addEventListener('visibilitychange', async () => {
   renderReminders();
   invalidateInsightCache();
   renderDayInsights();
+  state.invalidateStreakCache();
+  renderStreak();
 });
 
 // Listen for messages from service worker (notification clicks while app is open)
@@ -447,6 +550,10 @@ navigator.serviceWorker?.addEventListener('message', (e) => {
     switchTab('pomo');
   } else if (e.data?.type === 'DAILY_REVIEW') {
     switchTab('day');
+  } else if (e.data?.type === 'QUICK_COMPLETE' && e.data.blockId) {
+    handleQuickComplete(e.data.blockId);
+  } else if (e.data?.type === 'QUICK_SKIP' && e.data.blockId) {
+    handleQuickSkip(e.data.blockId);
   }
 });
 

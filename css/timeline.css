@@ -79,6 +79,21 @@
 .light .energy-suggestion.mid { border-color: #c4884a; color: #c4884a; }
 .light .energy-suggestion.high { border-color: #2d6a4f; color: #2d6a4f; }
 
+.streak-badge {
+  max-width: 700px;
+  margin: 0 auto 10px;
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.streak-badge .streak-count {
+  font-weight: 700;
+  color: var(--text);
+}
+
 .add-block-btn {
   padding: 8px 16px;
   border-radius: 20px;
@@ -593,6 +608,47 @@
 .reorder-suggestion-actions .btn {
   font-size: 0.78rem;
   padding: 5px 14px;
+}
+
+/* ── Pool prompt after energy check-in ── */
+
+.pool-prompt-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 115;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  padding: 20px;
+  animation: checkin-fade-in 0.3s ease;
+}
+
+.pool-prompt {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px 20px;
+  max-width: 400px;
+  width: 100%;
+  margin-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.pool-prompt-text {
+  font-size: 0.88rem;
+  color: var(--text);
+  margin-bottom: 14px;
+  line-height: 1.4;
+}
+
+.pool-prompt-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.pool-prompt-actions .btn {
+  font-size: 0.8rem;
+  padding: 7px 16px;
 }
 
 /* ── Energy check-in popup ── */
