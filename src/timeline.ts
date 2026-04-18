@@ -442,7 +442,7 @@ async function deleteFromTimeline(idx: number): Promise<void> {
   const block = state.blocks[idx];
   if (!block) return;
 
-  const isRecurring = !block.date;
+  const isRecurring = !block.date && block.days.length > 0;
   const name = block.title || TYPE_LABELS[block.type] + ' block';
   const choice = await confirmDelete(name, isRecurring);
 

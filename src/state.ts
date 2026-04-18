@@ -310,9 +310,9 @@ class AppState {
 
   /** Get the effective status for a block on a given date. */
   getEffectiveStatus(block: FlowBlock, date: string): BlockStatus {
-    // One-off blocks use their own status field directly
-    if (block.date) return block.status;
-    // Recurring blocks check the completions map
+    // One-off blocks (dated or unscheduled pool items) use their own status field
+    if (block.date || block.days.length === 0) return block.status;
+    // Truly recurring blocks check the completions map
     const key = `${block.id}_${date}`;
     return this.completions.get(key) || 'pending';
   }
@@ -322,8 +322,8 @@ class AppState {
     if (!existing?.id) return;
     const today = getTodayDate();
 
-    if (existing.date) {
-      // One-off block: update the block row directly (original behavior)
+    if (existing.date || existing.days.length === 0) {
+      // One-off block (dated or unscheduled pool item): update the block row directly
       await supabase.from('blocks').update({ status }).eq('id', existing.id);
       this.blocks[index].status = status;
     } else {
