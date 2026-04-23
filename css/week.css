@@ -104,6 +104,20 @@
   text-overflow: ellipsis;
 }
 
+.week-cell-status {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font-size: 0.7rem;
+  line-height: 1;
+  color: var(--text-dim);
+}
+
+.week-block.completed { opacity: 0.55; }
+.week-block.completed .week-cell-label { text-decoration: line-through; }
+.week-block.skipped { opacity: 0.35; }
+.week-block.skipped .week-cell-label { text-decoration: line-through; }
+
 /* Calendar event detail popover */
 .week-cal-popover {
   z-index: 100;

@@ -336,8 +336,10 @@ async function handleBlockStartNudge(ctx: Ctx, completions: Map<string, string>)
       const startMin = bh * 60 + bm;
       const diff = startMin - nowMinutes;
 
-      // Fire when block starts in 3-7 minutes (cron runs every minute)
-      if (diff < 3 || diff > 7) continue;
+      // Fire when block starts in 4-5 minutes (cron runs every minute).
+      // Narrow window: gives the user ~4 min to skip before the first tick
+      // fires, while still leaving a 2-tick safety margin against cron lag.
+      if (diff < 4 || diff > 5) continue;
 
       if (!await dedup(ctx.supabase, userId, 'block_start', `${block.id}:${localDate}`)) continue;
 
@@ -391,7 +393,7 @@ async function handleBlockEndCheckin(ctx: Ctx, completions: Map<string, string>)
   return sent;
 }
 
-async function handleMorningBrief(ctx: Ctx, _completions: Map<string, string>): Promise<number> {
+async function handleMorningBrief(ctx: Ctx, completions: Map<string, string>): Promise<number> {
   let sent = 0;
 
   for (const [userId, userSubs] of ctx.subsByUser) {
@@ -400,16 +402,13 @@ async function handleMorningBrief(ctx: Ctx, _completions: Map<string, string>): 
     const localDow = localDayOfWeek(ctx.now, tz);
     const nowMinutes = localMinutesSinceMidnight(ctx.now, tz);
 
-    // Get all of this user's scheduled blocks for today (including completed)
-    const todayBlocks = ctx.blocks.filter((b: BlockRow) => {
-      if (b.user_id !== userId || !b.start_time) return false;
-      return b.block_date ? b.block_date === localDate : (b.days || []).includes(localDow);
-    });
-
-    if (todayBlocks.length === 0) continue;
+    // Only count blocks that are still active (not done/skipped) — otherwise
+    // "First up" can announce a block the user has already opted out of.
+    const active = getActiveBlocks(ctx.blocks, userId, localDate, localDow, completions);
+    if (active.length === 0) continue;
 
     // Find the earliest block
-    const sorted = [...todayBlocks].sort((a: BlockRow, b: BlockRow) =>
+    const sorted = [...active].sort((a: BlockRow, b: BlockRow) =>
       a.start_time.localeCompare(b.start_time)
     );
     const first = sorted[0];
@@ -425,7 +424,7 @@ async function handleMorningBrief(ctx: Ctx, _completions: Map<string, string>): 
 
     const firstLabel = first.title || first.type;
     const payload = JSON.stringify({
-      title: `You've got ${todayBlocks.length} thing${todayBlocks.length > 1 ? 's' : ''} today`,
+      title: `You've got ${active.length} thing${active.length > 1 ? 's' : ''} today`,
       body: `First up: ${firstLabel} at ${formatTime(first.start_time.slice(0, 5))}`,
       icon: '/icons/icon.png',
       tag: 'morning-brief',

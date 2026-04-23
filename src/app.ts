@@ -485,8 +485,9 @@ async function onUserSignedIn(userId: string): Promise<void> {
     history.replaceState(null, '', '/');
   }
 
-  // Energy check-in popup on load — always prompt on a fresh app open
-  showCheckinPopup();
+  // Energy check-in popup on load — only prompt if it's been 1+ hour since
+  // the last log (and within the 9 AM – 9 PM window).
+  maybeShowCheckinPopup();
 
   // Show sync dialog if there are calendar events to review
   if (state.calendarEvents.length > 0) {

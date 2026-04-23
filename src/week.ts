@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { DAYS, TYPE_LABELS, getTodayIndex, getTodayDate, getDateForDayIndex, FlowBlock, isScheduled, fmtTime, $id, esc } from './utils.js';
+import { DAYS, TYPE_LABELS, BlockStatus, getTodayIndex, getDateForDayIndex, FlowBlock, isScheduled, fmtTime, $id, esc } from './utils.js';
 import { openModal, openModalForSlot } from './modal.js';
 import type { CalendarEvent } from './calendar/types.js';
 
@@ -28,6 +28,7 @@ interface DayItem {
   endMin: number;
   block?: FlowBlock;
   blockIdx?: number;
+  status?: BlockStatus;
   calEvent?: CalendarEvent;
   calColorIdx?: number;
 }
@@ -70,10 +71,12 @@ export function renderWeek(): void {
     state.blocks.forEach((b, idx) => {
       if (!blockVisibleOnDay(b, dayIdx)) return;
       if (!isScheduled(b)) return; // skip pool blocks — they have no time position
+      const status = state.getEffectiveStatus(b, date);
+      if (status === 'dismissed') return;
       const [bh, bm] = b.start.split(':').map(Number);
       const startMin = bh * 60 + (bm || 0);
       const endMin = startMin + b.duration;
-      items.push({ startMin, endMin, block: b, blockIdx: idx });
+      items.push({ startMin, endMin, block: b, blockIdx: idx, status });
     });
 
     const dayEvents = state.weekCalendarEvents.get(date) || [];
@@ -121,8 +124,14 @@ export function renderWeek(): void {
       const width = (1 / totalCols) * 100;
 
       if (item.block) {
-        html += `<div class="week-block type-${item.block.type}" data-block-index="${item.blockIdx}" style="top:${top}px;height:${height}px;left:${left}%;width:${width}%">
-          <div class="week-cell-label">${esc(item.block.title || TYPE_LABELS[item.block.type])}</div>
+        const statusClass =
+          item.status === 'done' ? 'completed' :
+          item.status === 'skipped' ? 'skipped' : '';
+        const statusIcon =
+          item.status === 'done' ? '<span class="week-cell-status">✓</span>' :
+          item.status === 'skipped' ? '<span class="week-cell-status">–</span>' : '';
+        html += `<div class="week-block type-${item.block.type} ${statusClass}" data-block-index="${item.blockIdx}" style="top:${top}px;height:${height}px;left:${left}%;width:${width}%">
+          ${statusIcon}<div class="week-cell-label">${esc(item.block.title || TYPE_LABELS[item.block.type])}</div>
         </div>`;
       } else if (item.calEvent) {
         html += `<div class="week-block calendar-event cal-color-${item.calColorIdx}" data-cal-title="${esc(item.calEvent.title)}" data-cal-start="${item.calEvent.start}" data-cal-end="${item.calEvent.end}" data-cal-duration="${item.calEvent.duration}" data-cal-provider="${esc(item.calEvent.provider)}" style="top:${top}px;height:${height}px;left:${left}%;width:${width}%">

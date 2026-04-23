@@ -6,9 +6,19 @@ type AuthCallback = (userId: string | null) => void;
 
 let onAuthChange: AuthCallback = () => {};
 let initialResolved = false;
+let lastNotifiedUserId: string | null | undefined = undefined;
 
 export function onAuth(callback: AuthCallback): void {
   onAuthChange = callback;
+}
+
+// Dedupes repeated notifications for the same user — getSession() and
+// onAuthStateChange both fire on load, and onAuthStateChange also fires on
+// TOKEN_REFRESHED, which would otherwise re-trigger the sign-in flow.
+function notifyAuth(userId: string | null): void {
+  if (lastNotifiedUserId === userId) return;
+  lastNotifiedUserId = userId;
+  onAuthChange(userId);
 }
 
 function hideSplash(): void {
@@ -177,10 +187,10 @@ export function initAuth(): void {
       // Don't call showApp() here — let onUserSignedIn do it after data loads.
       // But if auth changes AFTER initial load (e.g. sign-in from auth screen),
       // we still need to notify the callback.
-      onAuthChange(session.user.id);
+      notifyAuth(session.user.id);
     } else {
       showAuth();
-      onAuthChange(null);
+      notifyAuth(null);
     }
   });
 
@@ -189,7 +199,7 @@ export function initAuth(): void {
     initialResolved = true;
     if (session?.user) {
       // Don't showApp yet — onUserSignedIn will call showApp after data loads
-      onAuthChange(session.user.id);
+      notifyAuth(session.user.id);
     } else {
       showAuth();
     }

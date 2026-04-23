@@ -86,15 +86,15 @@ class AppState {
       .order('start_time');
     this.blocks = (blockRows || []).map(blockFromRow);
 
-    // Fetch today's completions for recurring blocks
-    const today = getTodayDate();
+    // Fetch the last 7 days of completions for recurring blocks so the week
+    // view can show what was done on each day.
     const recurringIds = this.blocks.filter(b => !b.date && b.id).map(b => b.id!);
     if (recurringIds.length > 0) {
       const { data: compRows } = await supabase
         .from('block_completions')
         .select('*')
         .in('block_id', recurringIds)
-        .eq('completion_date', today);
+        .gte('completion_date', cutoffDate);
       this.completions.clear();
       for (const row of (compRows || []) as CompletionRow[]) {
         this.completions.set(`${row.block_id}_${row.completion_date}`, row.status as BlockStatus);
@@ -153,7 +153,6 @@ class AppState {
    *  Skips heavy one-time setup (calendar OAuth, pomo settings). */
   async refresh(): Promise<void> {
     if (!this.userId) return;
-    const today = getTodayDate();
 
     // Re-fetch blocks
     const cutoff = new Date();
@@ -167,14 +166,14 @@ class AppState {
       .order('start_time');
     this.blocks = (blockRows || []).map(blockFromRow);
 
-    // Re-fetch completions
+    // Re-fetch completions (last 7 days, for the week view)
     const recurringIds = this.blocks.filter(b => !b.date && b.id).map(b => b.id!);
     if (recurringIds.length > 0) {
       const { data: compRows } = await supabase
         .from('block_completions')
         .select('*')
         .in('block_id', recurringIds)
-        .eq('completion_date', today);
+        .gte('completion_date', cutoffDate);
       this.completions.clear();
       for (const row of (compRows || []) as CompletionRow[]) {
         this.completions.set(`${row.block_id}_${row.completion_date}`, row.status as BlockStatus);
