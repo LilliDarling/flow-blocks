@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { fmtTime, normalizeDoneTime, addMinutes, getTodayIndex, getTodayDate, TYPE_LABELS, BlockStatus, ENERGY_FIT, FlowBlock, isScheduled, $id, esc } from './utils.js';
+import { fmtTime, normalizeDoneTime, localDateFromIso, addMinutes, getTodayIndex, getTodayDate, TYPE_LABELS, BlockStatus, ENERGY_FIT, FlowBlock, isScheduled, $id, esc } from './utils.js';
 import { openModal } from './modal.js';
 import { confirmDelete } from './confirm-delete.js';
 import type { CalendarEvent } from './calendar/types.js';
@@ -215,10 +215,11 @@ function renderDoneList(): void {
   const count = $id('doneCount');
 
   // state.doneItems now spans the last 7 days (for the week view) — filter
-  // the daily list to just today, sorted by time-of-day.
+  // the daily list to just today (by local date, not UTC), sorted by
+  // time-of-day.
   const today = getTodayDate();
   const todayItems = state.doneItems
-    .filter(d => d.created_at.slice(0, 10) === today)
+    .filter(d => localDateFromIso(d.created_at) === today)
     .sort((a, b) => normalizeDoneTime(a.time).localeCompare(normalizeDoneTime(b.time)));
 
   if (todayItems.length === 0) {

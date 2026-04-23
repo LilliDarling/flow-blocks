@@ -36,6 +36,10 @@
   position: relative;
 }
 
+/* Alternating day shading — applied to header, day col, and Did col for
+ * the same weekday so each day reads as a single vertical band. */
+.day-shade { background: rgba(127, 127, 127, 0.05); }
+
 /* Hour slot backgrounds */
 .week-hour-slot {
   position: absolute;

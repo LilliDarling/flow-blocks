@@ -312,6 +312,15 @@ export function fmtTime(t: string): string {
   return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
 }
 
+/** Convert a UTC ISO timestamp to the user's local "YYYY-MM-DD". */
+export function localDateFromIso(iso: string): string {
+  const d = new Date(iso);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 /** Coerce a done_item time (legacy locale strings like "2:45 PM" or 24h
  *  "HH:MM") into a sortable 24h "HH:MM" string. */
 export function normalizeDoneTime(t: string): string {

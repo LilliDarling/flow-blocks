@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { DAYS, TYPE_LABELS, BlockStatus, getTodayIndex, getDateForDayIndex, FlowBlock, isScheduled, fmtTime, normalizeDoneTime, $id, esc } from './utils.js';
+import { DAYS, TYPE_LABELS, BlockStatus, getTodayIndex, getDateForDayIndex, FlowBlock, isScheduled, fmtTime, normalizeDoneTime, localDateFromIso, $id, esc } from './utils.js';
 import { openModal, openModalForSlot } from './modal.js';
 import type { CalendarEvent } from './calendar/types.js';
 
@@ -40,7 +40,8 @@ export function renderWeek(): void {
   // Headers
   let html = '<div class="week-header"></div>';
   DAYS.forEach((d, i) => {
-    html += `<div class="week-header ${i === todayIdx ? 'today' : ''}">${d}</div>`;
+    const shade = i % 2 === 1 ? 'day-shade' : '';
+    html += `<div class="week-header ${shade} ${i === todayIdx ? 'today' : ''}">${d}</div>`;
   });
 
   // Time labels column
@@ -56,7 +57,8 @@ export function renderWeek(): void {
   // Day columns
   DAYS.forEach((_, dayIdx) => {
     const date = getDateForDayIndex(dayIdx);
-    html += `<div class="week-day-col" style="height:${COL_HEIGHT}px">`;
+    const shade = dayIdx % 2 === 1 ? 'day-shade' : '';
+    html += `<div class="week-day-col ${shade}" style="height:${COL_HEIGHT}px">`;
 
     // Hour slot backgrounds (clickable to create new blocks)
     for (let h = START_HOUR; h <= END_HOUR; h++) {
@@ -157,8 +159,9 @@ export function renderWeek(): void {
   DAYS.forEach((_, dayIdx) => {
     const date = getDateForDayIndex(dayIdx);
     const dayItems = itemsByDate.get(date) || [];
+    const shade = dayIdx % 2 === 1 ? 'day-shade' : '';
     if (dayItems.length === 0) {
-      html += '<div class="week-did-col"></div>';
+      html += `<div class="week-did-col ${shade}"></div>`;
       return;
     }
     // Sort by when the user says they did it, not when they logged it.
@@ -172,18 +175,10 @@ export function renderWeek(): void {
         <span class="week-did-text">${esc(d.text)}</span>
       </div>`;
     }).join('');
-    html += `<div class="week-did-col">${chips}</div>`;
+    html += `<div class="week-did-col ${shade}">${chips}</div>`;
   });
 
   grid.innerHTML = html;
-}
-
-function localDateFromIso(iso: string): string {
-  const d = new Date(iso);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
 }
 
 function closeCalPopover(): void {
