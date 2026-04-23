@@ -118,6 +118,52 @@
 .week-block.skipped { opacity: 0.35; }
 .week-block.skipped .week-cell-label { text-decoration: line-through; }
 
+/* "Did" recap strip — mirrors the daily done list, per day */
+.week-did-label {
+  text-align: right;
+  padding: 8px 10px 4px 0;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.week-did-col {
+  padding: 6px 4px;
+  border-top: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 40px;
+}
+
+.week-did-chip {
+  background: var(--surface2);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 0.65rem;
+  line-height: 1.2;
+  color: var(--text);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  display: flex;
+  gap: 4px;
+  align-items: baseline;
+}
+
+.week-did-chip .week-did-time {
+  color: var(--text-dim);
+  font-size: 0.6rem;
+  flex-shrink: 0;
+}
+
+.week-did-chip .week-did-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Calendar event detail popover */
 .week-cal-popover {
   z-index: 100;

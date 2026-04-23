@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { fmtTime, addMinutes, getTodayIndex, getTodayDate, TYPE_LABELS, BlockStatus, ENERGY_FIT, FlowBlock, isScheduled, $id, esc } from './utils.js';
+import { fmtTime, normalizeDoneTime, addMinutes, getTodayIndex, getTodayDate, TYPE_LABELS, BlockStatus, ENERGY_FIT, FlowBlock, isScheduled, $id, esc } from './utils.js';
 import { openModal } from './modal.js';
 import { confirmDelete } from './confirm-delete.js';
 import type { CalendarEvent } from './calendar/types.js';
@@ -214,17 +214,24 @@ function renderDoneList(): void {
   const list = $id('doneList');
   const count = $id('doneCount');
 
-  if (state.doneItems.length === 0) {
+  // state.doneItems now spans the last 7 days (for the week view) — filter
+  // the daily list to just today, sorted by time-of-day.
+  const today = getTodayDate();
+  const todayItems = state.doneItems
+    .filter(d => d.created_at.slice(0, 10) === today)
+    .sort((a, b) => normalizeDoneTime(a.time).localeCompare(normalizeDoneTime(b.time)));
+
+  if (todayItems.length === 0) {
     list.innerHTML = '';
     count.textContent = '';
     return;
   }
 
-  list.innerHTML = state.doneItems.map(d =>
-    `<div class="done-item">✓ ${esc(d.text)} <span style="float:right;opacity:0.5">${esc(d.time)}</span></div>`
+  list.innerHTML = todayItems.map(d =>
+    `<div class="done-item">✓ ${esc(d.text)} <span style="float:right;opacity:0.5">${fmtTime(normalizeDoneTime(d.time))}</span></div>`
   ).join('');
   count.textContent =
-    `${state.doneItems.length} thing${state.doneItems.length !== 1 ? 's' : ''} done`;
+    `${todayItems.length} thing${todayItems.length !== 1 ? 's' : ''} done`;
 }
 
 /** Prompt to log something that wasn't in the app — freeform text + time. */

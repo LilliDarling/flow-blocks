@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { DAYS, TYPE_LABELS, BlockStatus, getTodayIndex, getDateForDayIndex, FlowBlock, isScheduled, fmtTime, $id, esc } from './utils.js';
+import { DAYS, TYPE_LABELS, BlockStatus, getTodayIndex, getDateForDayIndex, FlowBlock, isScheduled, fmtTime, normalizeDoneTime, $id, esc } from './utils.js';
 import { openModal, openModalForSlot } from './modal.js';
 import type { CalendarEvent } from './calendar/types.js';
 
@@ -143,7 +143,47 @@ export function renderWeek(): void {
     html += '</div>';
   });
 
+  // "Did" recap strip: one cell per day listing everything from the daily
+  // done list — scheduled completions, pool completions, freeform log entries.
+  const itemsByDate = new Map<string, typeof state.doneItems>();
+  for (const d of state.doneItems) {
+    const dateKey = localDateFromIso(d.created_at);
+    const list = itemsByDate.get(dateKey) || [];
+    list.push(d);
+    itemsByDate.set(dateKey, list);
+  }
+
+  html += '<div class="week-did-label">Did</div>';
+  DAYS.forEach((_, dayIdx) => {
+    const date = getDateForDayIndex(dayIdx);
+    const dayItems = itemsByDate.get(date) || [];
+    if (dayItems.length === 0) {
+      html += '<div class="week-did-col"></div>';
+      return;
+    }
+    // Sort by when the user says they did it, not when they logged it.
+    const sorted = [...dayItems].sort((a, b) =>
+      normalizeDoneTime(a.time).localeCompare(normalizeDoneTime(b.time))
+    );
+    const chips = sorted.map(d => {
+      const t = normalizeDoneTime(d.time);
+      return `<div class="week-did-chip" title="${esc(d.text)}">
+        <span class="week-did-time">${fmtTime(t)}</span>
+        <span class="week-did-text">${esc(d.text)}</span>
+      </div>`;
+    }).join('');
+    html += `<div class="week-did-col">${chips}</div>`;
+  });
+
   grid.innerHTML = html;
+}
+
+function localDateFromIso(iso: string): string {
+  const d = new Date(iso);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function closeCalPopover(): void {

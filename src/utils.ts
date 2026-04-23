@@ -144,6 +144,7 @@ export interface DoneItem {
   id?: string;
   text: string;
   time: string;
+  created_at: string;
 }
 
 export type PomoMode = 'focus' | 'short' | 'long';
@@ -301,7 +302,7 @@ export function getTodayDate(): string {
 }
 
 export function doneItemFromRow(row: DoneItemRow): DoneItem {
-  return { id: row.id, text: row.text, time: row.time };
+  return { id: row.id, text: row.text, time: row.time, created_at: row.created_at };
 }
 
 export function fmtTime(t: string): string {
@@ -309,6 +310,20 @@ export function fmtTime(t: string): string {
   const ampm = h >= 12 ? 'PM' : 'AM';
   const h12 = h % 12 || 12;
   return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
+}
+
+/** Coerce a done_item time (legacy locale strings like "2:45 PM" or 24h
+ *  "HH:MM") into a sortable 24h "HH:MM" string. */
+export function normalizeDoneTime(t: string): string {
+  if (/^\d{2}:\d{2}$/.test(t)) return t;
+  const match = t.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+  if (!match) return '00:00';
+  let h = parseInt(match[1], 10);
+  const m = parseInt(match[2], 10);
+  const ampm = match[3]?.toUpperCase();
+  if (ampm === 'PM' && h < 12) h += 12;
+  else if (ampm === 'AM' && h === 12) h = 0;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
 export function addMinutes(t: string, mins: number): string {

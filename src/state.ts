@@ -113,14 +113,16 @@ class AppState {
     this.loadHiddenCalendarEvents();
     await this.loadCalendar();
 
-    // Fetch done items (today only)
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    // Fetch done items for the last 7 days (for the week view recap)
+    const weekStart = new Date();
+    weekStart.setDate(weekStart.getDate() - 7);
+    weekStart.setHours(0, 0, 0, 0);
     const { data: doneRows } = await supabase
       .from('done_items')
       .select('*')
       .eq('user_id', userId)
-      .gte('created_at', todayStart.toISOString());
+      .gte('created_at', weekStart.toISOString())
+      .order('created_at', { ascending: true });
     this.doneItems = (doneRows || []).map(doneItemFromRow);
 
     // Fetch pomo settings
@@ -186,14 +188,16 @@ class AppState {
       this.energy = this.energyLogs[this.energyLogs.length - 1].value;
     }
 
-    // Re-fetch done items
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    // Re-fetch done items (last 7 days, for the week view recap)
+    const weekStart = new Date();
+    weekStart.setDate(weekStart.getDate() - 7);
+    weekStart.setHours(0, 0, 0, 0);
     const { data: doneRows } = await supabase
       .from('done_items')
       .select('*')
       .eq('user_id', this.userId)
-      .gte('created_at', todayStart.toISOString());
+      .gte('created_at', weekStart.toISOString())
+      .order('created_at', { ascending: true });
     this.doneItems = (doneRows || []).map(doneItemFromRow);
 
     // Re-fetch reminders + completions/skips
@@ -559,7 +563,9 @@ class AppState {
   // --- Done items ---
 
   async addDoneItem(text: string, completedAt?: Date, sourceBlockId?: string): Promise<void> {
-    const time = (completedAt ?? new Date()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const at = completedAt ?? new Date();
+    // Store as 24h "HH:MM" so the week view can sort chips by time-of-day.
+    const time = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
     const { data } = await supabase
       .from('done_items')
       .insert({ user_id: this.userId, text, time })
