@@ -157,6 +157,20 @@
   margin-bottom: var(--sp-3);
 }
 
+.quickstart-hint-warn {
+  font-family: var(--display-font);
+  font-style: italic;
+  font-size: 13px;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--steady);
+  line-height: 1.5;
+  padding: 10px 14px;
+  background: color-mix(in oklch, var(--steady) 8%, transparent);
+  border: 1px solid color-mix(in oklch, var(--steady) 30%, var(--border-soft));
+  border-radius: var(--radius-sm);
+}
+
 .quickstart-actions {
   display: flex;
   gap: 8px;

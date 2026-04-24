@@ -4,7 +4,11 @@ import {
   BlockStatus, CompletionRow, EnergyLogRow,
   Reminder, ReminderRow, ReminderCompletionRow, ReminderTimeSuggestion, reminderFromRow,
   blockFromRow, doneItemFromRow, getTodayDate, getDateForDayIndex, valueToTier,
+  isScheduled,
 } from './utils.js';
+
+/** Max active pool items — unscheduled + pending. Prevents runaway brain-dump bloat. */
+export const POOL_MAX_ACTIVE = 150;
 import { emit, diff, MutationSource } from './events.js';
 import {
   CalendarEvent, CalendarConnection,
@@ -209,7 +213,24 @@ class AppState {
 
   // --- Block CRUD ---
 
-  async addBlock(block: FlowBlock, source: MutationSource = 'manual'): Promise<void> {
+  /** Count active (pending) pool items. Used to enforce POOL_MAX_ACTIVE. */
+  countActivePool(): number {
+    return this.blocks.filter(b =>
+      !isScheduled(b) && b.status !== 'done' && b.status !== 'skipped'
+    ).length;
+  }
+
+  /** True if a new block would land in the pool (no start time, no date). */
+  private isPoolTarget(block: FlowBlock): boolean {
+    return !block.start && !block.date && (!block.days || block.days.length === 0);
+  }
+
+  async addBlock(block: FlowBlock, source: MutationSource = 'manual'): Promise<boolean> {
+    // Pool cap guard — reject if adding would exceed the active-pool limit.
+    if (this.isPoolTarget(block) && this.countActivePool() >= POOL_MAX_ACTIVE) {
+      return false;
+    }
+
     const row: Record<string, unknown> = {
       user_id: this.userId,
       type: block.type,
@@ -229,7 +250,15 @@ class AppState {
       .select()
       .single();
 
-    if (!error && data) {
+    if (error) {
+      // Server-side validation (length/range/pool-cap triggers) rejected
+      // this insert. Surface so the caller can warn the user instead of
+      // silently failing.
+      console.warn('[state] addBlock rejected by server:', error.message);
+      return false;
+    }
+
+    if (data) {
       this.blocks.push(blockFromRow(data));
       emit({
         type: 'block.created',
@@ -244,6 +273,7 @@ class AppState {
       });
     }
     this.showSaveBanner();
+    return true;
   }
 
   async updateBlock(index: number, block: FlowBlock, source: MutationSource = 'manual'): Promise<void> {
@@ -567,8 +597,13 @@ class AppState {
     const at = completedAt ?? new Date();
     // Store as 24h "HH:MM" so the week view can sort chips by time-of-day.
     const time = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
-    const insertRow: Record<string, unknown> = { user_id: this.userId, text, time };
-    if (durationMinutes && durationMinutes > 0) insertRow.duration_minutes = durationMinutes;
+    // Clamp to server-side limits (done_items_text_length / duration_range).
+    const safeText = text.slice(0, 500);
+    const safeDuration = durationMinutes && durationMinutes > 0
+      ? Math.min(durationMinutes, 1440)
+      : undefined;
+    const insertRow: Record<string, unknown> = { user_id: this.userId, text: safeText, time };
+    if (safeDuration) insertRow.duration_minutes = safeDuration;
     const { data } = await supabase
       .from('done_items')
       .insert(insertRow)
@@ -582,9 +617,9 @@ class AppState {
         entity_id: data.id,
         entity_type: null,
         payload: {
-          text, time,
+          text: safeText, time,
           ...(sourceBlockId && { source_block_id: sourceBlockId }),
-          ...(durationMinutes && durationMinutes > 0 ? { duration_minutes: durationMinutes } : {}),
+          ...(safeDuration ? { duration_minutes: safeDuration } : {}),
         },
       });
     }

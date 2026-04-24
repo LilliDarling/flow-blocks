@@ -1,4 +1,12 @@
-const CACHE_NAME = 'wildbloom-v2.1';
+// The CACHE_NAME below holds a build-time placeholder that the Vite plugin
+// in `vite.config.ts` replaces with `wildbloom-<pkgVersion>-<buildTimestamp>`
+// on every production build. Guarantees the `sw.js` bytes change on every
+// deploy, which triggers the browser's SW update detection and rotates the
+// cache so stale assets get evicted.
+//
+// In dev (vite dev server) the token may remain literal; SW registration
+// silently fails in dev anyway, so there's no user impact.
+const CACHE_NAME = '__SW_VERSION__';
 const PRECACHE = [
   '/',
 ];

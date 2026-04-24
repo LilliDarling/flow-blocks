@@ -52,6 +52,10 @@ export const googleProvider: CalendarProvider = {
           timeZone: tz,
           singleEvents: 'true',
           orderBy: 'startTime',
+          // Hard per-calendar ceiling. 50 events in a single day is already
+          // extreme; capping here keeps a recurring-meetings-gone-wild
+          // calendar from swamping the grid.
+          maxResults: '50',
         });
         const res = await fetch(
           `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?${params}`,
@@ -63,7 +67,17 @@ export const googleProvider: CalendarProvider = {
         for (const item of data.items || []) {
           if (item.status === 'cancelled') continue;
 
-          // Skip events the user hasn't accepted (declined or not yet responded)
+          // Skip non-commitment event types — out-of-office markers,
+          // working-location indicators, etc. aren't things the user is
+          // "doing" at that time.
+          if (item.eventType === 'outOfOffice' || item.eventType === 'workingLocation') continue;
+
+          // Skip events the user explicitly marked as available ("Show me as:
+          // Free"). These are reminders/placeholders, not commitments.
+          if (item.transparency === 'transparent') continue;
+
+          // Skip events the user hasn't accepted (declined or not yet
+          // responded). Tentative responses stay — the user might accept.
           if (item.attendees) {
             const self = item.attendees.find((a: { self?: boolean }) => a.self);
             if (self && (self.responseStatus === 'declined' || self.responseStatus === 'needsAction')) continue;
@@ -72,13 +86,21 @@ export const googleProvider: CalendarProvider = {
           const allDay = !!item.start?.date;
           const startDt = allDay ? null : new Date(item.start.dateTime);
           const endDt = allDay ? null : new Date(item.end.dateTime);
+          const durationMin = startDt && endDt
+            ? Math.round((endDt.getTime() - startDt.getTime()) / 60000)
+            : 1440;
+
+          // Skip runaway multi-day timed events (e.g. a 72-hour "conference"
+          // block). They mangle the day grid and rarely represent a single
+          // commitment. All-day events still pass through the `allDay` flag.
+          if (!allDay && durationMin > 24 * 60) continue;
 
           allEvents.push({
             id: `google_${item.id}`,
             title: item.summary || '(No title)',
             start: startDt ? `${pad(startDt.getHours())}:${pad(startDt.getMinutes())}` : '00:00',
             end: endDt ? `${pad(endDt.getHours())}:${pad(endDt.getMinutes())}` : '23:59',
-            duration: startDt && endDt ? Math.round((endDt.getTime() - startDt.getTime()) / 60000) : 1440,
+            duration: durationMin,
             allDay,
             provider: 'google',
             sourceCalendar: calId,

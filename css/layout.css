@@ -86,6 +86,36 @@
 }
 .light #themeToggleBtn::before { content: '\263E'; }
 
+/* Sync-health indicator — appears in the header only when sync is stuck */
+.sync-health-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid color-mix(in oklch, var(--steady) 50%, var(--border-soft));
+  background: color-mix(in oklch, var(--steady) 10%, var(--surface));
+  color: var(--steady);
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s var(--ease);
+  animation: sync-health-pulse 2.4s ease-in-out infinite;
+}
+
+.sync-health-btn:hover {
+  border-color: var(--steady);
+  background: color-mix(in oklch, var(--steady) 16%, var(--surface));
+}
+
+.sync-health-btn svg { display: block; }
+
+@keyframes sync-health-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--steady) 30%, transparent); }
+  50%      { box-shadow: 0 0 0 4px color-mix(in oklch, var(--steady) 0%, transparent); }
+}
+
 /* ── Tab bar: pill segmented control ── */
 .tabs {
   display: flex;

@@ -171,6 +171,11 @@ const TIER_LABELS: Record<EnergyTier, string> = {
 
 const POOL_TIER_ORDER: EnergyTier[] = ['high', 'med', 'low'];
 const POOL_MAX_PER_TIER = 4;
+const POOL_REST_PAGE_SIZE = 20;
+
+// How many overflow cards the "rest of your pool" is currently showing.
+// Lives at module scope so it survives re-renders triggered by other actions.
+let poolRestVisibleCount = POOL_REST_PAGE_SIZE;
 
 function renderPool(blocks: { block: FlowBlock; index: number }[], today: string, energy: number): void {
   const grid = $id('poolGrid');
@@ -247,6 +252,17 @@ function renderPool(blocks: { block: FlowBlock; index: number }[], today: string
       : `<p class="pool-tier-empty">Nothing in your pool fits ${currentTier === 'med' ? 'medium' : currentTier} energy right now. Peek at the rest below or add something that does.</p>`}
   </section>`;
 
+  // Paginate the overflow so the DOM stays small even with hundreds of items
+  const visibleOverflow = overflow.slice(0, poolRestVisibleCount);
+  const remainingCount = overflow.length - visibleOverflow.length;
+
+  const showMoreHtml = remainingCount > 0
+    ? `<button class="pool-rest-more" type="button" data-pool-rest-more>
+        Show ${Math.min(POOL_REST_PAGE_SIZE, remainingCount)} more
+        <span class="pool-rest-more-count">${remainingCount} left</span>
+      </button>`
+    : '';
+
   const restHtml = overflow.length > 0
     ? `<div class="pool-rest">
         <button class="pool-rest-toggle" type="button" aria-expanded="false" data-pool-rest-toggle>
@@ -255,8 +271,9 @@ function renderPool(blocks: { block: FlowBlock; index: number }[], today: string
           <svg class="pool-rest-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
         <div class="pool-rest-cards" hidden data-pool-rest-cards>
-          ${overflow.map(renderCard).join('')}
+          ${visibleOverflow.map(renderCard).join('')}
         </div>
+        ${showMoreHtml ? `<div class="pool-rest-more-wrap" data-pool-rest-more-wrap hidden>${showMoreHtml}</div>` : ''}
       </div>`
     : '';
 
@@ -605,7 +622,26 @@ export function initTimelineEvents(): void {
       const expanded = restToggle.getAttribute('aria-expanded') === 'true';
       restToggle.setAttribute('aria-expanded', String(!expanded));
       const rest = restToggle.parentElement?.querySelector('[data-pool-rest-cards]') as HTMLElement | null;
+      const moreWrap = restToggle.parentElement?.querySelector('[data-pool-rest-more-wrap]') as HTMLElement | null;
       if (rest) rest.hidden = expanded;
+      if (moreWrap) moreWrap.hidden = expanded;
+      // Collapsing resets pagination so reopening starts fresh at the top
+      if (expanded) poolRestVisibleCount = POOL_REST_PAGE_SIZE;
+      return;
+    }
+
+    // "Show N more" within the rest of your pool
+    const restMore = target.closest('[data-pool-rest-more]') as HTMLElement | null;
+    if (restMore) {
+      poolRestVisibleCount += POOL_REST_PAGE_SIZE;
+      renderTimeline();
+      // After re-render, keep the rest section open + the newly revealed cards visible
+      const toggle = document.querySelector('[data-pool-rest-toggle]') as HTMLElement | null;
+      const cards = document.querySelector('[data-pool-rest-cards]') as HTMLElement | null;
+      const wrap = document.querySelector('[data-pool-rest-more-wrap]') as HTMLElement | null;
+      if (toggle) toggle.setAttribute('aria-expanded', 'true');
+      if (cards) cards.hidden = false;
+      if (wrap) wrap.hidden = false;
       return;
     }
 

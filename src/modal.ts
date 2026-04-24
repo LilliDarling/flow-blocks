@@ -1,8 +1,27 @@
-import { state } from './state.js';
+import { state, POOL_MAX_ACTIVE } from './state.js';
 import { DAYS, BlockType, FlowBlock, fmtTime, addMinutes, isScheduled, $id, getTodayIndex, getTodayDate, getDateForDayIndex, TYPE_LABELS, TYPE_DESCRIPTIONS, BLOCK_TYPE_KEYWORDS, BLOCK_MENU_SUGGESTIONS, esc } from './utils.js';
 import { renderTimeline } from './timeline.js';
 import { renderWeek } from './week.js';
 import { confirmDelete } from './confirm-delete.js';
+
+/** Show a transient error inside the add/edit modal. */
+function showModalError(msg: string): void {
+  const modal = document.querySelector('#modal .modal') as HTMLElement | null;
+  if (!modal) return;
+  let banner = modal.querySelector<HTMLElement>('.modal-error');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.className = 'modal-error';
+    modal.insertBefore(banner, modal.firstChild);
+  }
+  banner.textContent = msg;
+  banner.style.display = 'block';
+}
+
+function clearModalError(): void {
+  const banner = document.querySelector<HTMLElement>('#modal .modal-error');
+  if (banner) banner.style.display = 'none';
+}
 
 type PlacementMode = 'pool' | 'pinned';
 type ScheduleMode = 'today' | 'recurring';
@@ -66,6 +85,7 @@ export function openModal(index = -1): void {
   state.selectedType = '';
   state.selectedDays = [];
   suggestedType = null;
+  clearModalError();
   $id('typeDescription').textContent = '';
 
   $id('deleteBtn').style.display = index >= 0 ? 'block' : 'none';
@@ -344,11 +364,20 @@ async function saveBlock(): Promise<void> {
 
   const duration = parseInt(($id('blockDuration') as HTMLSelectElement).value);
 
+  // Mirror the server-side CHECK / trigger limits so the user sees the
+  // truncation here, not a surprise rejection from the DB.
+  const TITLE_MAX = 200;
+  const MENU_ITEM_MAX = 100;
+  const MENU_MAX_ITEMS = 20;
+
   const block: FlowBlock = {
     type: effectiveType as BlockType,
-    title: ($id('blockTitle') as HTMLInputElement).value.trim(),
+    title: ($id('blockTitle') as HTMLInputElement).value.trim().slice(0, TITLE_MAX),
     menu: ($id('blockMenu') as HTMLTextAreaElement).value
-      .split('\n').map(s => s.trim()).filter(Boolean),
+      .split('\n')
+      .map(s => s.trim().slice(0, MENU_ITEM_MAX))
+      .filter(Boolean)
+      .slice(0, MENU_MAX_ITEMS),
     start,
     duration,
     days,
@@ -359,7 +388,13 @@ async function saveBlock(): Promise<void> {
   if (state.editingIndex >= 0) {
     await state.updateBlock(state.editingIndex, block, 'modal');
   } else {
-    await state.addBlock(block, 'modal');
+    const added = await state.addBlock(block, 'modal');
+    if (!added) {
+      // Pool cap hit — surface inline and keep the modal open so the user
+      // can adjust instead of losing what they typed.
+      showModalError(`Your pool is full (${state.countActivePool()}/${POOL_MAX_ACTIVE}). Complete or remove something before adding more.`);
+      return;
+    }
   }
 
   closeModal();

@@ -40,6 +40,20 @@
   color: var(--ink);
 }
 
+.modal-error {
+  display: none;
+  font-family: var(--display-font);
+  font-style: italic;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--steady);
+  padding: 10px 14px;
+  margin-bottom: var(--sp-3);
+  background: color-mix(in oklch, var(--steady) 8%, transparent);
+  border: 1px solid color-mix(in oklch, var(--steady) 30%, var(--border-soft));
+  border-radius: var(--radius-sm);
+}
+
 @keyframes modal-fade {
   from { opacity: 0; }
   to   { opacity: 1; }

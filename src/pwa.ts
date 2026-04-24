@@ -67,7 +67,10 @@ function handleUpdateClick(): void {
 function registerServiceWorker(): void {
   if (!('serviceWorker' in navigator)) return;
 
-  navigator.serviceWorker.register('/sw.js').then((reg) => {
+  // `updateViaCache: 'none'` bypasses the HTTP cache when the browser
+  // checks for `/sw.js` updates. Without this the SW file can be cached
+  // for up to 24h, delaying deploy propagation.
+  navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then((reg) => {
     // Check for updates every 30 minutes
     setInterval(() => reg.update(), 30 * 60 * 1000);
 

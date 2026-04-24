@@ -131,6 +131,13 @@
   <h1>Wildbloom</h1>
   <p>Energy-first days for curious minds</p>
   <div class="header-actions">
+    <button class="sync-health-btn" id="syncHealthBtn" aria-label="Sync status" style="display:none">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 9v4"/>
+        <path d="M12 17h.01"/>
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+      </svg>
+    </button>
     <button class="header-btn" id="themeToggleBtn" aria-label="Toggle dark mode"></button>
     <button class="header-btn" id="calendarSettingsBtn" aria-label="Calendars">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -441,7 +448,7 @@
         <li><strong>Energy logs</strong> — kept for <strong>30 days</strong> (14 days are used for your analytics chart).</li>
         <li><strong>Pomodoro sessions</strong> — kept for <strong>30 days</strong>.</li>
         <li><strong>Reminders</strong> — kept as long as your account exists. Daily completion history kept for <strong>30 days</strong>.</li>
-        <li><strong>Event log</strong> — every action (completions, skips, energy check-ins) is recorded as a lightweight event. This is what powers the insights on your day view — streaks, energy-type correlations, skip patterns. Kept while your account exists so patterns can emerge over time; deleted with your account.</li>
+        <li><strong>Event log</strong> — every action (completions, skips, energy check-ins) is recorded as a lightweight event. This is what powers the insights on your day view — streaks, energy-type correlations, skip patterns. Kept for <strong>60 days</strong>, which gives weekly patterns enough repetitions to surface confidently, then cleaned up. Learned patterns persist in a separate summary so your insights don't reset.</li>
       </ul>
       <p>Cleanup runs automatically each night. Insights are computed from your own events only — nothing leaves your account and no model is trained across users. All data is protected by row-level security — only you can see your own data. We never share or sell your information.</p>
       <div class="legal-links">
@@ -471,11 +478,11 @@
     </div>
     <div class="form-group">
       <label>What is it? (or leave blank to decide later)</label>
-      <input type="text" id="blockTitle" placeholder="e.g. Morning workout">
+      <input type="text" id="blockTitle" placeholder="e.g. Morning workout" maxlength="200">
     </div>
     <div class="form-group">
       <label>Options — what might you do? (one per line)</label>
-      <textarea id="blockMenu" placeholder="Write project proposal&#10;Organize research notes&#10;Review pull requests"></textarea>
+      <textarea id="blockMenu" placeholder="Write project proposal&#10;Organize research notes&#10;Review pull requests" maxlength="2200"></textarea>
       <div class="menu-suggestions" id="menuSuggestions"></div>
     </div>
     <div class="form-group">

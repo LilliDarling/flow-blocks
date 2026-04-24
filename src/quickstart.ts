@@ -1,4 +1,4 @@
-import { state } from './state.js';
+import { state, POOL_MAX_ACTIVE } from './state.js';
 import { BlockType, FlowBlock, BLOCK_TYPE_KEYWORDS, TYPE_LABELS, $id, esc, getTodayDate } from './utils.js';
 import { renderTimeline } from './timeline.js';
 import { renderWeek } from './week.js';
@@ -101,8 +101,8 @@ function parseIntoPooItems(input: string): PoolItem[] {
       groupBuckets.get(task.type)!.push(task);
     } else {
       items.push({
-        title: task.text,
-        menu: [task.text],
+        title: task.text.slice(0, 200),
+        menu: [task.text.slice(0, 100)],
         type: task.type,
         duration: task.quick ? QUICK_DURATION : DEFAULT_DURATIONS[task.type],
       });
@@ -112,8 +112,8 @@ function parseIntoPooItems(input: string): PoolItem[] {
   for (const [type, tasks] of groupBuckets) {
     const allQuick = tasks.every(t => t.quick);
     items.push({
-      title: tasks.length === 1 ? tasks[0].text : TYPE_LABELS[type],
-      menu: tasks.map(t => t.text),
+      title: (tasks.length === 1 ? tasks[0].text : TYPE_LABELS[type]).slice(0, 200),
+      menu: tasks.map(t => t.text.slice(0, 100)).slice(0, 20),
       type,
       duration: allQuick ? QUICK_DURATION : DEFAULT_DURATIONS[type],
     });
@@ -184,7 +184,12 @@ function showQuickStart(): void {
     goBtn.disabled = true;
     goBtn.textContent = 'Adding...';
 
-    for (const b of planned) {
+    // Respect the pool cap — only add as many as there's room for.
+    const slotsLeft = Math.max(0, POOL_MAX_ACTIVE - state.countActivePool());
+    const toAdd = planned.slice(0, slotsLeft);
+    const dropped = planned.length - toAdd.length;
+
+    for (const b of toAdd) {
       const block: FlowBlock = {
         type: b.type,
         title: b.title,
@@ -196,6 +201,20 @@ function showQuickStart(): void {
         status: 'pending',
       };
       await state.addBlock(block, 'modal');
+    }
+
+    if (dropped > 0) {
+      // Surface so the user knows what didn't land, without losing their text
+      goBtn.disabled = false;
+      goBtn.textContent = `Add ${toAdd.length}`;
+      const hint = overlay.querySelector('.quickstart-hint') as HTMLElement | null;
+      if (hint) {
+        hint.textContent = `Added ${toAdd.length}. Pool is full (${POOL_MAX_ACTIVE}) — ${dropped} item${dropped === 1 ? '' : 's'} didn't fit. Complete or remove some to make room.`;
+        hint.classList.add('quickstart-hint-warn');
+      }
+      renderTimeline();
+      renderWeek();
+      return;
     }
 
     overlay.remove();

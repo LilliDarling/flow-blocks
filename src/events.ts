@@ -195,16 +195,86 @@ interface QueuedEvent {
 const DB_NAME = 'wildbloom-events';
 const DB_VERSION = 1;
 const STORE_NAME = 'queue';
-const SYNC_INTERVAL_MS = 30_000;
-const BATCH_SIZE = 20;
+
+/** How often the background drain loop runs when the tab is open.
+ *  Trades freshness for request rate — 60s is well under the insights
+ *  query cache TTL (5 min) so patterns stay responsive, and halves the
+ *  number of no-op drains vs 30s. Emit() also triggers an immediate
+ *  drain, so this interval is really just a retry cadence. */
+const SYNC_INTERVAL_MS = 60_000;
+
+/** Events drained in a single Supabase insert. Bumped from 20 so that
+ *  bursty traffic (e.g. a user completing several blocks back-to-back)
+ *  consolidates into one round-trip. Each event is ~200 bytes, so 100
+ *  rows is ~20 KB per insert — well within Supabase payload limits. */
+const BATCH_SIZE = 100;
+
 const MAX_PENDING = 1000;
-const MAX_QUEUE_SIZE = 5000;
+
+/** Hard ceiling on the IDB queue. ~200 bytes per event means 50k events
+ *  is ~10 MB — well inside the browser quota, and represents ~1000 days
+ *  of heavy use without a successful sync. In practice this should never
+ *  be reached; if it is, something is badly broken and we surface it. */
+const MAX_QUEUE_SIZE = 50_000;
+
+/** Thresholds for the sync-health indicator. */
+const HEALTH_FAILURE_THRESHOLD = 3;          // N consecutive failures → stuck
+const HEALTH_STALE_MS = 24 * 60 * 60 * 1000; // queued events older than 24h → stuck
 
 let db: IDBDatabase | null = null;
 let syncTimer: ReturnType<typeof setInterval> | null = null;
 let draining = false;
 let pendingBuffer: QueuedEvent[] = [];
 let approxQueueSize = 0;
+
+// ── Sync health tracking ──
+let consecutiveSyncFailures = 0;
+let lastSuccessfulSync: number | null = null;
+let lastSyncError: string | null = null;
+let eventsDroppedAtCap = 0;
+
+export interface SyncHealth {
+  queueSize: number;
+  consecutiveFailures: number;
+  lastSuccessMs: number | null;
+  lastError: string | null;
+  eventsDroppedAtCap: number;
+  stuck: boolean;
+}
+
+/** Public accessor for sync health — used to render the header indicator. */
+export function getSyncHealth(): SyncHealth {
+  const stuck =
+    consecutiveSyncFailures >= HEALTH_FAILURE_THRESHOLD ||
+    eventsDroppedAtCap > 0 ||
+    (approxQueueSize > 0 &&
+      lastSuccessfulSync != null &&
+      Date.now() - lastSuccessfulSync > HEALTH_STALE_MS);
+  return {
+    queueSize: approxQueueSize,
+    consecutiveFailures: consecutiveSyncFailures,
+    lastSuccessMs: lastSuccessfulSync,
+    lastError: lastSyncError,
+    eventsDroppedAtCap,
+    stuck,
+  };
+}
+
+type SyncHealthListener = (h: SyncHealth) => void;
+const healthListeners = new Set<SyncHealthListener>();
+
+/** Subscribe to sync-health changes. Fires on every drain + enqueue-drop. */
+export function onSyncHealthChange(fn: SyncHealthListener): () => void {
+  healthListeners.add(fn);
+  return () => healthListeners.delete(fn);
+}
+
+function notifyHealth(): void {
+  const h = getSyncHealth();
+  for (const fn of healthListeners) {
+    try { fn(h); } catch (e) { console.warn('[events] health listener error:', e); }
+  }
+}
 
 function openEventDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -222,11 +292,28 @@ function openEventDB(): Promise<IDBDatabase> {
 
 function enqueue(event: QueuedEvent): void {
   if (!db) {
-    if (pendingBuffer.length >= MAX_PENDING) return;
+    if (pendingBuffer.length >= MAX_PENDING) {
+      eventsDroppedAtCap++;
+      console.error(
+        `[events] DROPPED: in-memory buffer full (${MAX_PENDING} events). ` +
+        `IDB has not initialized. Event type=${event.type} lost.`
+      );
+      notifyHealth();
+      return;
+    }
     pendingBuffer.push(event);
     return;
   }
-  if (approxQueueSize >= MAX_QUEUE_SIZE) return;
+  if (approxQueueSize >= MAX_QUEUE_SIZE) {
+    eventsDroppedAtCap++;
+    console.error(
+      `[events] DROPPED: queue full (${MAX_QUEUE_SIZE} events). ` +
+      `Sync has been failing. Event type=${event.type} lost. ` +
+      `Check auth state + network. Total drops this session: ${eventsDroppedAtCap}`
+    );
+    notifyHealth();
+    return;
+  }
   try {
     const tx = db.transaction(STORE_NAME, 'readwrite');
     tx.objectStore(STORE_NAME).add(event);
@@ -288,11 +375,28 @@ async function drainQueue(): Promise<void> {
         if (event.localId != null) store.delete(event.localId);
       }
       approxQueueSize = Math.max(0, approxQueueSize - events.length);
+      consecutiveSyncFailures = 0;
+      lastSuccessfulSync = Date.now();
+      lastSyncError = null;
+      notifyHealth();
     } else {
-      console.warn('[events] sync failed, will retry:', error.message);
+      consecutiveSyncFailures++;
+      lastSyncError = error.message;
+      if (consecutiveSyncFailures === HEALTH_FAILURE_THRESHOLD) {
+        console.error(
+          `[events] SYNC STUCK: ${HEALTH_FAILURE_THRESHOLD} consecutive failures. ` +
+          `${approxQueueSize} events queued locally. Last error: ${error.message}`
+        );
+      } else {
+        console.warn(`[events] sync failed (${consecutiveSyncFailures}x), will retry:`, error.message);
+      }
+      notifyHealth();
     }
   } catch (e) {
+    consecutiveSyncFailures++;
+    lastSyncError = e instanceof Error ? e.message : String(e);
     console.warn('[events] drain error:', e);
+    notifyHealth();
   } finally {
     draining = false;
   }
@@ -383,6 +487,10 @@ export async function clearEventQueue(): Promise<void> {
   stopSyncLoop();
   pendingBuffer = [];
   approxQueueSize = 0;
+  consecutiveSyncFailures = 0;
+  lastSuccessfulSync = null;
+  lastSyncError = null;
+  eventsDroppedAtCap = 0;
   if (db) {
     try {
       const tx = db.transaction(STORE_NAME, 'readwrite');
@@ -391,6 +499,7 @@ export async function clearEventQueue(): Promise<void> {
       console.warn('[events] clear failed:', e);
     }
   }
+  notifyHealth();
 }
 
 /** Compute a ChangeSet from two objects. Only includes fields that actually changed. */

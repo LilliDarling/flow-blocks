@@ -18,7 +18,7 @@ import { renderReminders, initReminderEvents, scheduleReminders } from './routin
 import { initDeleteConfirmEvents } from './confirm-delete.js';
 import { initPWA } from './pwa.js';
 import { subscribeToPush } from './push.js';
-import { initEvents, emit, startSyncLoop, stopSyncLoop } from './events.js';
+import { initEvents, emit, startSyncLoop, stopSyncLoop, onSyncHealthChange, getSyncHealth, SyncHealth } from './events.js';
 import { renderDayInsights, renderPatternInsights, initInsightEvents, invalidateInsightCache } from './insights.js';
 import { initQuickStart } from './quickstart.js';
 
@@ -320,6 +320,54 @@ async function handleQuickSkip(blockId: string): Promise<void> {
 
 // --- Streak ---
 
+// --- Sync health indicator ---
+
+function formatAgo(ms: number | null): string {
+  if (ms == null) return 'never';
+  const s = Math.floor((Date.now() - ms) / 1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)} hr ago`;
+  return `${Math.floor(s / 86400)} day${Math.floor(s / 86400) === 1 ? '' : 's'} ago`;
+}
+
+function applySyncHealth(h: SyncHealth): void {
+  const btn = document.getElementById('syncHealthBtn') as HTMLElement | null;
+  if (!btn) return;
+  btn.style.display = h.stuck ? '' : 'none';
+  const lines = [
+    `${h.queueSize} event${h.queueSize === 1 ? '' : 's'} waiting to sync`,
+    `Last successful sync: ${formatAgo(h.lastSuccessMs)}`,
+    h.lastError ? `Last error: ${h.lastError}` : '',
+    h.eventsDroppedAtCap > 0 ? `⚠ ${h.eventsDroppedAtCap} event(s) dropped — queue was full` : '',
+    '',
+    'Check your connection or sign out and back in.',
+  ].filter(Boolean);
+  btn.title = lines.join('\n');
+}
+
+function initSyncHealthIndicator(): void {
+  applySyncHealth(getSyncHealth());
+  onSyncHealthChange(applySyncHealth);
+  const btn = document.getElementById('syncHealthBtn');
+  if (btn) {
+    btn.addEventListener('click', () => {
+      const h = getSyncHealth();
+      const msg = [
+        `Sync is stuck.`,
+        ``,
+        `${h.queueSize} events are waiting locally.`,
+        `Last successful sync: ${formatAgo(h.lastSuccessMs)}.`,
+        h.lastError ? `Last error: ${h.lastError}` : '',
+        h.eventsDroppedAtCap > 0 ? `⚠ ${h.eventsDroppedAtCap} event(s) have been dropped — the queue filled up.` : '',
+        ``,
+        `Try: check your connection, refresh the page, or sign out and back in. Your queued events will sync once sync is working again.`,
+      ].filter(Boolean).join('\n');
+      alert(msg);
+    });
+  }
+}
+
 async function renderStreak(): Promise<void> {
   const badge = $id('streakBadge');
   if (!badge) return;
@@ -429,6 +477,7 @@ async function onUserSignedIn(userId: string): Promise<void> {
 
   // Initialize event system (IDB queue + sync loop)
   await initEvents();
+  initSyncHealthIndicator();
   emit({ type: 'app.session_started', entity_type: null, payload: {} });
 
   // Restore energy tier from last logged value

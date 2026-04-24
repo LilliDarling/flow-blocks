@@ -130,6 +130,9 @@ export async function handleOAuthCallback(
   return (conn as CalendarConnection) || null;
 }
 
+/** Max events retained per day after merging across connected calendars. */
+const MAX_EVENTS_PER_DAY = 60;
+
 /** Fetch today's events from all connected calendars. */
 export async function fetchAllEvents(
   connections: CalendarConnection[],
@@ -149,7 +152,20 @@ export async function fetchAllEvents(
     }
   }
 
-  return results.sort((a, b) => a.start.localeCompare(b.start));
+  // De-dupe: same event synced across overlapping calendars would land twice.
+  // Keep the first occurrence by normalized id.
+  const seen = new Set<string>();
+  const deduped = results.filter(e => {
+    if (seen.has(e.id)) return false;
+    seen.add(e.id);
+    return true;
+  });
+
+  // Sort by start, then cap per-day so a user with 5 connected calendars
+  // doesn't push hundreds of events through the week-view layout engine.
+  return deduped
+    .sort((a, b) => a.start.localeCompare(b.start))
+    .slice(0, MAX_EVENTS_PER_DAY);
 }
 
 /** Revoke an OAuth token so it can no longer be used. Best-effort — don't block on failure. */

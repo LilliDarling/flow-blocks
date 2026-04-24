@@ -57,8 +57,10 @@ async function loadInsightEvents(): Promise<EventRow[]> {
   }
 
   try {
+    // Match the server-side retention window (60 days) — gives weekly
+    // patterns enough repetitions to reach statistical confidence.
     const since = new Date();
-    since.setDate(since.getDate() - 30);
+    since.setDate(since.getDate() - 60);
 
     const { data, error } = await supabase
       .from('events')

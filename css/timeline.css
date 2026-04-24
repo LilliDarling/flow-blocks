@@ -583,6 +583,41 @@
 
 .pool-rest-cards[hidden] { display: none; }
 
+.pool-rest-more-wrap[hidden] { display: none; }
+
+.pool-rest-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 16px;
+  background: transparent;
+  border: 1px dashed var(--border-soft);
+  border-radius: var(--radius);
+  color: var(--ink-2);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.18s var(--ease-soft);
+  justify-content: center;
+}
+
+.pool-rest-more:hover {
+  border-color: var(--ink-3);
+  color: var(--ink);
+  background: var(--surface-hover);
+}
+
+.pool-rest-more-count {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
 .pool-card {
   background: var(--surface);
   border: 1px solid var(--border-soft);
