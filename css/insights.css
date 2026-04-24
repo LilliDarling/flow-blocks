@@ -1,32 +1,38 @@
+/* ── Insights (day + pattern) — Wildbloom botanical ── */
 #dayInsights {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--sp-2);
+  max-width: 760px;
+  margin: 0 auto var(--sp-3);
 }
 
-#dayInsights:empty {
-  display: none;
-}
+#dayInsights:empty { display: none; }
 
 .insight-card {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
-  border-radius: 12px;
-  font-size: 0.85rem;
-  line-height: 1.4;
-  border: 1px solid var(--border);
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-soft);
+  background: var(--surface);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  transition: border-color 0.2s var(--ease);
 }
 
+.insight-card:hover { border-color: var(--ink-3); }
+
 .insight-positive {
-  background: color-mix(in srgb, var(--push) 8%, var(--surface));
-  border-color: color-mix(in srgb, var(--push) 20%, var(--border));
+  background: color-mix(in oklch, var(--accent) 6%, var(--surface));
+  border-color: color-mix(in oklch, var(--accent) 28%, var(--border-soft));
 }
 
 .insight-nudge {
-  background: color-mix(in srgb, var(--steady) 8%, var(--surface));
-  border-color: color-mix(in srgb, var(--steady) 20%, var(--border));
+  background: color-mix(in oklch, var(--steady) 6%, var(--surface));
+  border-color: color-mix(in oklch, var(--steady) 28%, var(--border-soft));
 }
 
 .insight-pattern {
@@ -36,45 +42,59 @@
   gap: 4px;
 }
 
-.insight-text {
-  flex: 1;
-}
+.insight-text { flex: 1; }
+
+.insight-text strong { color: var(--ink); font-weight: 600; }
 
 .insight-evidence {
-  font-size: 0.75rem;
-  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  font-weight: 500;
 }
 
 .insight-dismiss {
   flex-shrink: 0;
   background: none;
   border: none;
-  color: var(--text-dim);
-  font-size: 1.1rem;
+  color: var(--ink-3);
+  font-size: 1.15rem;
   cursor: pointer;
   padding: 0 4px;
   line-height: 1;
-  opacity: 0.5;
-  transition: opacity 0.15s;
+  transition: color 0.15s var(--ease);
 }
 
-.insight-dismiss:hover {
-  opacity: 1;
-}
+.insight-dismiss:hover { color: var(--ink); }
 
 .pattern-insights-title {
-  font-size: 1rem;
-  font-weight: 600;
-  margin-top: 24px;
-  margin-bottom: 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  font-weight: 500;
+  margin: 0 0 var(--sp-2);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pattern-insights-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-soft);
 }
 
 #patternInsights {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--sp-2);
+  max-width: 760px;
+  margin: var(--sp-5) auto 0;
 }
 
-#patternInsights:empty {
-  display: none;
-}
+#patternInsights:empty { display: none; }

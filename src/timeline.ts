@@ -1,5 +1,6 @@
 import { state } from './state.js';
-import { fmtTime, fmtDuration, normalizeDoneTime, localDateFromIso, addMinutes, getTodayIndex, getTodayDate, TYPE_LABELS, BlockStatus, ENERGY_FIT, FlowBlock, isScheduled, $id, esc } from './utils.js';
+import { fmtTime, fmtDuration, normalizeDoneTime, localDateFromIso, addMinutes, getTodayIndex, getTodayDate, TYPE_LABELS, BlockStatus, ENERGY_FIT, FlowBlock, isScheduled, valueToTier, $id, esc } from './utils.js';
+import type { BlockType, EnergyTier } from './utils.js';
 import { openModal } from './modal.js';
 import { confirmDelete } from './confirm-delete.js';
 import type { CalendarEvent } from './calendar/types.js';
@@ -114,8 +115,12 @@ function renderCommitmentBlock(block: FlowBlock, realIndex: number, today: strin
         <button class="block-action-btn done-btn" data-action="done" data-index="${realIndex}">Did it</button>
         <button class="block-action-btn skip-btn" data-action="skip" data-index="${realIndex}">Not today</button>
         <button class="block-action-btn" data-action="unpin" data-index="${realIndex}">Unpin</button>
-        <button class="block-action-btn" data-action="edit" data-index="${realIndex}">Edit</button>
-        <button class="block-action-btn delete-btn" data-action="delete" data-index="${realIndex}">Remove</button>
+        <button class="block-action-btn block-action-icon" data-action="edit" data-index="${realIndex}" aria-label="Edit" title="Edit">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        </button>
+        <button class="block-action-btn block-action-icon delete-btn" data-action="delete" data-index="${realIndex}" aria-label="Remove" title="Remove">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 012-2h2a2 2 0 012 2v2"/></svg>
+        </button>
       </div>
     </div>
   </div>`;
@@ -147,25 +152,32 @@ function renderCalendarEvent(event: CalendarEvent): string {
   </div>`;
 }
 
+/** Primary energy tier for each block type — drives pool grouping. */
+const TYPE_TO_TIER: Record<BlockType, EnergyTier> = {
+  push:   'high',
+  flow:   'high',
+  steady: 'med',
+  growth: 'med',
+  buffer: 'med',
+  drift:  'low',
+  rest:   'low',
+};
+
+const TIER_LABELS: Record<EnergyTier, string> = {
+  high: 'High energy',
+  med:  'Medium energy',
+  low:  'Low energy',
+};
+
+const POOL_TIER_ORDER: EnergyTier[] = ['high', 'med', 'low'];
+const POOL_MAX_PER_TIER = 4;
+
 function renderPool(blocks: { block: FlowBlock; index: number }[], today: string, energy: number): void {
-  const section = $id('poolSection');
   const grid = $id('poolGrid');
   const empty = $id('poolEmpty');
   const hint = $id('poolHint');
 
-  // Sort: energy-matched items first, then by type
-  const sorted = [...blocks].sort((a, b) => {
-    const [aMin, aMax] = ENERGY_FIT[a.block.type];
-    const [bMin, bMax] = ENERGY_FIT[b.block.type];
-    const aMatch = energy >= aMin && energy <= aMax ? 0 : 1;
-    const bMatch = energy >= bMin && energy <= bMax ? 0 : 1;
-    if (aMatch !== bMatch) return aMatch - bMatch;
-    return a.block.type.localeCompare(b.block.type);
-  });
-
-  const all = sorted;
-
-  if (all.length === 0) {
+  if (blocks.length === 0) {
     grid.style.display = 'none';
     empty.style.display = 'block';
     hint.style.display = 'none';
@@ -176,7 +188,7 @@ function renderPool(blocks: { block: FlowBlock; index: number }[], today: string
   empty.style.display = 'none';
   hint.style.display = '';
 
-  grid.innerHTML = all.map(({ block, index }) => {
+  const renderCard = ({ block, index }: { block: FlowBlock; index: number }): string => {
     const effectiveStatus = state.getEffectiveStatus(block, today);
     const statusClass =
       effectiveStatus === 'done' ? 'completed' :
@@ -202,12 +214,53 @@ function renderPool(blocks: { block: FlowBlock; index: number }[], today: string
       <div class="pool-card-actions">
         <button class="block-action-btn done-btn" data-action="done" data-index="${index}">Did it</button>
         <button class="block-action-btn skip-btn" data-action="skip" data-index="${index}">Not today</button>
-        <button class="block-action-btn" data-action="pin" data-index="${index}">Pin to time</button>
-        <button class="block-action-btn" data-action="edit" data-index="${index}">Edit</button>
-        <button class="block-action-btn delete-btn" data-action="delete" data-index="${index}">Remove</button>
+        <button class="block-action-btn" data-action="pin" data-index="${index}">Pin</button>
+        <button class="block-action-btn block-action-icon" data-action="edit" data-index="${index}" aria-label="Edit" title="Edit">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        </button>
+        <button class="block-action-btn block-action-icon delete-btn" data-action="delete" data-index="${index}" aria-label="Remove" title="Remove">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 012-2h2a2 2 0 012 2v2"/></svg>
+        </button>
       </div>
     </div>`;
-  }).join('');
+  };
+
+  // Only the current energy tier is visible; everything else goes in "the rest"
+  const currentTier = valueToTier(energy);
+  const matching: typeof blocks = [];
+  const others:   typeof blocks = [];
+  blocks.forEach(b => {
+    if (TYPE_TO_TIER[b.block.type] === currentTier) matching.push(b);
+    else others.push(b);
+  });
+
+  const visible = matching.slice(0, POOL_MAX_PER_TIER);
+  const overflow = [...matching.slice(POOL_MAX_PER_TIER), ...others];
+
+  const tierSection = `<section class="pool-tier pool-tier-${currentTier} pool-tier-match">
+    <header class="pool-tier-header">
+      <span class="pool-tier-label">${TIER_LABELS[currentTier]}</span>
+      <span class="pool-tier-count">${matching.length}</span>
+    </header>
+    ${visible.length > 0
+      ? `<div class="pool-tier-cards">${visible.map(renderCard).join('')}</div>`
+      : `<p class="pool-tier-empty">Nothing in your pool fits ${currentTier === 'med' ? 'medium' : currentTier} energy right now. Peek at the rest below or add something that does.</p>`}
+  </section>`;
+
+  const restHtml = overflow.length > 0
+    ? `<div class="pool-rest">
+        <button class="pool-rest-toggle" type="button" aria-expanded="false" data-pool-rest-toggle>
+          <span class="pool-rest-label">The rest of your pool</span>
+          <span class="pool-rest-count">${overflow.length}</span>
+          <svg class="pool-rest-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="pool-rest-cards" hidden data-pool-rest-cards>
+          ${overflow.map(renderCard).join('')}
+        </div>
+      </div>`
+    : '';
+
+  grid.innerHTML = tierSection + restHtml;
 }
 
 function renderDoneList(): void {
@@ -545,6 +598,17 @@ export function initTimelineEvents(): void {
 
   dayView.addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
+
+    // "The rest of your pool" expand/collapse
+    const restToggle = target.closest('[data-pool-rest-toggle]') as HTMLElement | null;
+    if (restToggle) {
+      const expanded = restToggle.getAttribute('aria-expanded') === 'true';
+      restToggle.setAttribute('aria-expanded', String(!expanded));
+      const rest = restToggle.parentElement?.querySelector('[data-pool-rest-cards]') as HTMLElement | null;
+      if (rest) rest.hidden = expanded;
+      return;
+    }
+
     const actionBtn = target.closest('[data-action]') as HTMLElement | null;
     if (actionBtn) {
       e.stopPropagation();

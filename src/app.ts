@@ -324,12 +324,8 @@ async function renderStreak(): Promise<void> {
   const badge = $id('streakBadge');
   if (!badge) return;
   const streak = await state.computeStreak();
-  if (streak < 2) {
-    badge.style.display = 'none';
-    return;
-  }
   badge.style.display = '';
-  badge.innerHTML = `<span class="streak-count">${streak}-day streak</span> — keep it going`;
+  badge.innerHTML = `<span class="streak-count">${streak}</span><span class="streak-label">Day Streak</span>`;
 }
 
 // --- Legal pages ---

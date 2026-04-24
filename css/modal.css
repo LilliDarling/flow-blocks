@@ -1,12 +1,16 @@
+/* ── Modal shell — Wildbloom botanical ── */
 .modal-overlay {
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
+  background: color-mix(in srgb, var(--bg) 60%, black);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   z-index: 100;
   justify-content: center;
   align-items: center;
+  padding: var(--sp-4);
+  animation: modal-fade 0.2s var(--ease);
 }
 
 .modal-overlay.open { display: flex; }
@@ -14,115 +18,163 @@
 #deleteConfirm { z-index: 110; }
 
 .modal {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 28px;
-  max-width: 440px;
-  width: 90%;
-  max-height: 85vh;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-5);
+  max-width: 460px;
+  width: 100%;
+  max-height: 90vh;
   overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+  animation: modal-slide 0.3s var(--ease);
 }
 
 .modal h2 {
-  font-size: 1.1rem;
-  margin-bottom: 20px;
-  font-weight: 600;
+  font-family: var(--display-font);
+  font-style: italic;
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  margin: 0 0 var(--sp-4);
+  color: var(--ink);
 }
 
+@keyframes modal-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes modal-slide {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ── Type picker (energy buckets) ── */
 .type-options {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
 }
 
 .type-description {
-  font-size: 0.75rem;
-  color: var(--text-dim);
-  margin-top: 8px;
-  min-height: 1.2em;
+  font-family: var(--display-font);
   font-style: italic;
+  font-size: 0.82rem;
+  color: var(--ink-2);
+  margin-top: var(--sp-2);
+  min-height: 1.4em;
 }
 
 .type-option {
-  padding: 10px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--surface2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-soft);
+  background: var(--bg-sunk);
+  color: var(--ink-2);
   cursor: pointer;
-  text-align: center;
-  font-size: 0.8rem;
-  transition: all 0.15s;
+  font-size: 12px;
+  font-weight: 500;
   font-family: inherit;
-  color: var(--text);
+  transition: all 0.15s var(--ease);
 }
 
-.type-option:hover { border-color: var(--accent); }
-.type-option.selected { border-color: var(--accent); background: var(--accent-glow); }
+.type-option:hover {
+  border-color: var(--ink-3);
+  color: var(--ink);
+}
+
+.type-option.selected {
+  border-color: var(--accent);
+  background: color-mix(in oklch, var(--accent) 8%, var(--surface));
+  color: var(--ink);
+}
+
 .type-option.suggested {
   border-color: var(--accent);
-  box-shadow: 0 0 8px rgba(30, 128, 64, 0.25);
   position: relative;
 }
+
 .type-option.suggested::after {
   content: 'suggested';
   position: absolute;
   top: -8px;
-  right: 6px;
-  font-size: 0.55rem;
+  right: 8px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
   color: var(--accent);
-  background: var(--surface);
-  padding: 0 4px;
+  background: var(--bg-raised);
+  padding: 0 6px;
 }
 
 .type-dot {
   display: inline-block;
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  margin-right: 6px;
+  margin-right: 0;
 }
 
+/* ── Scheduling toggle ── */
 .sched-toggle {
   display: flex;
-  gap: 8px;
+  gap: 6px;
 }
 
 .sched-btn {
   flex: 1;
-  padding: 8px;
-  border-radius: 8px;
+  padding: 10px 14px;
+  border-radius: 999px;
   border: 1px solid var(--border);
-  background: var(--surface2);
+  background: transparent;
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: 13px;
+  font-weight: 500;
   font-family: inherit;
-  color: var(--text);
-  transition: all 0.15s;
+  color: var(--ink-2);
+  transition: all 0.18s var(--ease-soft);
 }
 
-.sched-btn:hover { border-color: var(--accent); }
-.sched-btn.selected { border-color: var(--accent); background: var(--accent-glow); }
+.sched-btn:hover {
+  border-color: var(--ink-3);
+  color: var(--ink);
+  background: var(--surface-hover);
+}
+
+.sched-btn.selected {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
 
 .modal-buttons {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
-  margin-top: 20px;
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--border-soft);
 }
 
-/* Delete confirmation dialog */
+/* ── Delete confirm ── */
 .delete-confirm-modal {
-  max-width: 360px;
+  max-width: 380px;
   text-align: center;
 }
 
 .delete-confirm-desc {
-  font-size: 0.84rem;
-  color: var(--text-dim);
-  margin-bottom: 18px;
+  font-family: var(--display-font);
+  font-style: italic;
+  font-size: 0.88rem;
+  color: var(--ink-2);
+  margin-bottom: var(--sp-3);
   line-height: 1.5;
 }
 
@@ -137,57 +189,63 @@
   width: 100%;
   padding: 10px;
   justify-content: center;
-  font-size: 0.85rem;
+  font-size: 13px;
 }
 
 .delete-confirm-modal .modal-buttons {
   justify-content: center;
+  border-top: 0;
+  padding-top: 0;
 }
 
-/* Menu suggestion chips */
+/* ── Menu suggestion chips ── */
 .menu-suggestions {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 8px;
+  margin-top: 10px;
 }
 
 .menu-suggestions-label {
   width: 100%;
-  font-size: 0.7rem;
-  color: var(--text-dim);
-  margin-bottom: 2px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: 4px;
+  font-weight: 500;
 }
 
 .menu-chip {
   padding: 4px 12px;
-  border-radius: 14px;
-  border: 1px solid var(--border);
-  background: var(--surface2);
-  color: var(--text-dim);
-  font-size: 0.72rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-sunk);
+  color: var(--ink-2);
+  font-size: 12px;
   font-family: inherit;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.15s var(--ease);
 }
 
 .menu-chip:hover {
-  border-color: var(--accent);
-  color: var(--text);
+  border-color: var(--ink-3);
+  color: var(--ink);
 }
 
 .menu-chip-personal {
-  border-color: var(--accent);
-  background: rgba(30, 128, 64, 0.08);
+  border-color: color-mix(in oklch, var(--accent) 50%, var(--border));
+  background: color-mix(in oklch, var(--accent) 8%, transparent);
+  color: var(--accent);
 }
 
-@media (max-width: 768px) {
+@media (max-width: 520px) {
   .modal {
-    padding: 20px 16px;
-    width: 95%;
-    max-height: 90vh;
-    border-radius: 14px;
+    padding: var(--sp-4);
+    border-radius: var(--radius);
   }
-  .type-options { grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
-  .type-option { padding: 8px 6px; font-size: 0.72rem; }
+  .type-options { grid-template-columns: repeat(3, 1fr); }
+  .type-option { font-size: 11px; padding: 10px 4px; }
 }

@@ -1,5 +1,6 @@
 import { state } from './state.js';
 import { DAYS, TYPE_LABELS, BlockStatus, getTodayIndex, getDateForDayIndex, FlowBlock, isScheduled, fmtTime, fmtDuration, normalizeDoneTime, localDateFromIso, $id, esc } from './utils.js';
+import type { DoneItem } from './utils.js';
 import { openModal, openModalForSlot } from './modal.js';
 import type { CalendarEvent } from './calendar/types.js';
 
@@ -31,7 +32,11 @@ interface DayItem {
   status?: BlockStatus;
   calEvent?: CalendarEvent;
   calColorIdx?: number;
+  doneItem?: DoneItem;
 }
+
+/** Fallback height for a done_item without a duration (pool completions / freeform). */
+const DONE_FALLBACK_MIN = 20;
 
 export function renderWeek(): void {
   const grid = $id('weekGrid');
@@ -75,6 +80,9 @@ export function renderWeek(): void {
       if (!isScheduled(b)) return; // skip pool blocks — they have no time position
       const status = state.getEffectiveStatus(b, date);
       if (status === 'dismissed') return;
+      // Completed blocks are rendered from done_items at their actual completion
+      // time instead — avoids duplication and respects user's logged timestamp.
+      if (status === 'done') return;
       const [bh, bm] = b.start.split(':').map(Number);
       const startMin = bh * 60 + (bm || 0);
       const endMin = startMin + b.duration;
@@ -88,6 +96,24 @@ export function renderWeek(): void {
       const startMin = eh * 60 + (em || 0);
       const endMin = startMin + e.duration;
       items.push({ startMin, endMin, calEvent: e, calColorIdx: eIdx % 8 });
+    });
+
+    // Done items for this day — slot into the grid at their logged time,
+    // regardless of whether they came from a pinned block, a pool completion,
+    // or a freeform "did something else" log.
+    state.doneItems.forEach(d => {
+      if (localDateFromIso(d.created_at) !== date) return;
+      const t = normalizeDoneTime(d.time);
+      const [dh, dm] = t.split(':').map(Number);
+      let startMin = dh * 60 + (dm || 0);
+      // Clamp to visible window so nothing silently disappears
+      const minStart = START_HOUR * 60;
+      const maxStart = END_HOUR * 60 - 10;
+      if (startMin < minStart) startMin = minStart;
+      if (startMin > maxStart) startMin = maxStart;
+      const durMin = d.duration_minutes && d.duration_minutes > 0 ? d.duration_minutes : DONE_FALLBACK_MIN;
+      const endMin = startMin + durMin;
+      items.push({ startMin, endMin, doneItem: d });
     });
 
     // Greedy column assignment for overlapping items
@@ -126,12 +152,8 @@ export function renderWeek(): void {
       const width = (1 / totalCols) * 100;
 
       if (item.block) {
-        const statusClass =
-          item.status === 'done' ? 'completed' :
-          item.status === 'skipped' ? 'skipped' : '';
-        const statusIcon =
-          item.status === 'done' ? '<span class="week-cell-status">✓</span>' :
-          item.status === 'skipped' ? '<span class="week-cell-status">–</span>' : '';
+        const statusClass = item.status === 'skipped' ? 'skipped' : '';
+        const statusIcon = item.status === 'skipped' ? '<span class="week-cell-status">–</span>' : '';
         html += `<div class="week-block type-${item.block.type} ${statusClass}" data-block-index="${item.blockIdx}" style="top:${top}px;height:${height}px;left:${left}%;width:${width}%">
           ${statusIcon}<div class="week-cell-label">${esc(item.block.title || TYPE_LABELS[item.block.type])}</div>
         </div>`;
@@ -139,50 +161,24 @@ export function renderWeek(): void {
         html += `<div class="week-block calendar-event cal-color-${item.calColorIdx}" data-cal-title="${esc(item.calEvent.title)}" data-cal-start="${item.calEvent.start}" data-cal-end="${item.calEvent.end}" data-cal-duration="${item.calEvent.duration}" data-cal-provider="${esc(item.calEvent.provider)}" style="top:${top}px;height:${height}px;left:${left}%;width:${width}%">
           <div class="week-cell-label">${esc(item.calEvent.title)}</div>
         </div>`;
+      } else if (item.doneItem) {
+        const d = item.doneItem;
+        const durAttr = d.duration_minutes && d.duration_minutes > 0 ? String(d.duration_minutes) : '';
+        const durationBadge = d.duration_minutes && d.duration_minutes > 0
+          ? `<span class="week-done-dur">${fmtDuration(d.duration_minutes)}</span>`
+          : '';
+        const titleAttr = d.duration_minutes && d.duration_minutes > 0
+          ? `${d.text} · ${fmtTime(normalizeDoneTime(d.time))} · ${fmtDuration(d.duration_minutes)}`
+          : `${d.text} · ${fmtTime(normalizeDoneTime(d.time))}`;
+        html += `<div class="week-block week-done" title="${esc(titleAttr)}" data-done-text="${esc(d.text)}" data-done-time="${esc(normalizeDoneTime(d.time))}" data-done-duration="${esc(durAttr)}" style="top:${top}px;height:${height}px;left:${left}%;width:${width}%">
+          <span class="week-done-check">✓</span>
+          <div class="week-cell-label">${esc(d.text)}</div>
+          ${durationBadge}
+        </div>`;
       }
     }
 
     html += '</div>';
-  });
-
-  // "Did" recap strip: one cell per day listing everything from the daily
-  // done list — scheduled completions, pool completions, freeform log entries.
-  const itemsByDate = new Map<string, typeof state.doneItems>();
-  for (const d of state.doneItems) {
-    const dateKey = localDateFromIso(d.created_at);
-    const list = itemsByDate.get(dateKey) || [];
-    list.push(d);
-    itemsByDate.set(dateKey, list);
-  }
-
-  html += '<div class="week-did-label">Did</div>';
-  DAYS.forEach((_, dayIdx) => {
-    const date = getDateForDayIndex(dayIdx);
-    const dayItems = itemsByDate.get(date) || [];
-    const shade = dayIdx % 2 === 1 ? 'day-shade' : '';
-    if (dayItems.length === 0) {
-      html += `<div class="week-did-col ${shade}"></div>`;
-      return;
-    }
-    // Sort by when the user says they did it, not when they logged it.
-    const sorted = [...dayItems].sort((a, b) =>
-      normalizeDoneTime(a.time).localeCompare(normalizeDoneTime(b.time))
-    );
-    const chips = sorted.map(d => {
-      const t = normalizeDoneTime(d.time);
-      const durationHtml = d.duration_minutes
-        ? `<span class="week-did-duration">${fmtDuration(d.duration_minutes)}</span>`
-        : '';
-      const titleAttr = d.duration_minutes
-        ? `${esc(d.text)} · ${fmtDuration(d.duration_minutes)}`
-        : esc(d.text);
-      return `<div class="week-did-chip" title="${titleAttr}">
-        <span class="week-did-time">${fmtTime(t)}</span>
-        <span class="week-did-text">${esc(d.text)}</span>
-        ${durationHtml}
-      </div>`;
-    }).join('');
-    html += `<div class="week-did-col ${shade}">${chips}</div>`;
   });
 
   grid.innerHTML = html;
@@ -191,6 +187,37 @@ export function renderWeek(): void {
 function closeCalPopover(): void {
   const existing = document.querySelector('.week-cal-popover');
   if (existing) existing.remove();
+}
+
+function showDonePopover(el: HTMLElement): void {
+  closeCalPopover();
+  const text = el.dataset.doneText || '';
+  const time = el.dataset.doneTime || '';
+  const durStr = el.dataset.doneDuration || '';
+  const durMin = durStr ? parseInt(durStr) : 0;
+  const durLine = durMin > 0 ? ` · ${fmtDuration(durMin)}` : '';
+
+  const pop = document.createElement('div');
+  pop.className = 'week-cal-popover';
+  pop.innerHTML = `
+    <div class="week-cal-popover-title">✓ ${esc(text)}</div>
+    <div class="week-cal-popover-time">${fmtTime(time)}${durLine}</div>
+    <div class="week-cal-popover-source">completed</div>`;
+
+  const rect = el.getBoundingClientRect();
+  pop.style.position = 'fixed';
+  pop.style.top = `${rect.top}px`;
+  pop.style.left = `${rect.right + 8}px`;
+
+  document.body.appendChild(pop);
+
+  const popRect = pop.getBoundingClientRect();
+  if (popRect.right > window.innerWidth - 8) {
+    pop.style.left = `${rect.left - popRect.width - 8}px`;
+  }
+  if (popRect.bottom > window.innerHeight - 8) {
+    pop.style.top = `${window.innerHeight - popRect.height - 8}px`;
+  }
 }
 
 function showCalPopover(el: HTMLElement): void {
@@ -246,7 +273,18 @@ export function initWeekEvents(): void {
       return;
     }
 
+    // Done item click → show detail popover (so short cells can still be read)
+    const doneEl = target.closest('.week-done[data-done-text]') as HTMLElement | null;
+    if (doneEl) {
+      showDonePopover(doneEl);
+      return;
+    }
+
+    // If a popover was open, this click just dismisses it — don't also
+    // create a new event.
+    const hadPopover = !!document.querySelector('.week-cal-popover');
     closeCalPopover();
+    if (hadPopover) return;
 
     // Hour slot click → create new block
     const slot = target.closest('.week-hour-slot') as HTMLElement | null;
@@ -258,7 +296,9 @@ export function initWeekEvents(): void {
   // Close popover when clicking outside the grid
   document.addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
-    if (!target.closest('.week-cal-popover') && !target.closest('.calendar-event[data-cal-title]')) {
+    if (!target.closest('.week-cal-popover') &&
+        !target.closest('.calendar-event[data-cal-title]') &&
+        !target.closest('.week-done[data-done-text]')) {
       closeCalPopover();
     }
   });
