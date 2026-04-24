@@ -54,8 +54,10 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 10px;
   padding: 10px 0;
   border-bottom: 1px solid var(--border-soft);
+  flex-wrap: wrap;
 }
 
 .cal-connection:last-child { border-bottom: none; }
@@ -64,6 +66,9 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .cal-provider-badge {
@@ -81,6 +86,10 @@
 .cal-connection-name {
   font-size: 13.5px;
   color: var(--ink);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .cal-reconnect-badge {
@@ -108,6 +117,8 @@
   cursor: pointer;
   font-family: inherit;
   transition: all 0.15s var(--ease);
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .cal-disconnect-btn:hover {

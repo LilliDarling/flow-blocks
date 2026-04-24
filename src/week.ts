@@ -101,18 +101,30 @@ export function renderWeek(): void {
     // Done items for this day — slot into the grid at their logged time,
     // regardless of whether they came from a pinned block, a pool completion,
     // or a freeform "did something else" log.
+    //
+    // The logged time is when the user *finished*. Duration (if present)
+    // represents time spent leading up to that moment, so the cell extends
+    // BACKWARD from the end time rather than forward.
     state.doneItems.forEach(d => {
       if (localDateFromIso(d.created_at) !== date) return;
       const t = normalizeDoneTime(d.time);
       const [dh, dm] = t.split(':').map(Number);
-      let startMin = dh * 60 + (dm || 0);
-      // Clamp to visible window so nothing silently disappears
-      const minStart = START_HOUR * 60;
-      const maxStart = END_HOUR * 60 - 10;
-      if (startMin < minStart) startMin = minStart;
-      if (startMin > maxStart) startMin = maxStart;
+      let endMin = dh * 60 + (dm || 0);
       const durMin = d.duration_minutes && d.duration_minutes > 0 ? d.duration_minutes : DONE_FALLBACK_MIN;
-      const endMin = startMin + durMin;
+      let startMin = endMin - durMin;
+
+      // Clamp to visible window so nothing silently disappears, preserving
+      // the duration length where possible.
+      const minStart = START_HOUR * 60;
+      const maxEnd = END_HOUR * 60;
+      if (startMin < minStart) {
+        startMin = minStart;
+        endMin = Math.min(startMin + durMin, maxEnd);
+      }
+      if (endMin > maxEnd) {
+        endMin = maxEnd;
+        startMin = Math.max(endMin - durMin, minStart);
+      }
       items.push({ startMin, endMin, doneItem: d });
     });
 
