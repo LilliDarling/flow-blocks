@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { DAYS, TYPE_LABELS, BlockStatus, getTodayIndex, getDateForDayIndex, FlowBlock, isScheduled, fmtTime, normalizeDoneTime, localDateFromIso, $id, esc } from './utils.js';
+import { DAYS, TYPE_LABELS, BlockStatus, getTodayIndex, getDateForDayIndex, FlowBlock, isScheduled, fmtTime, fmtDuration, normalizeDoneTime, localDateFromIso, $id, esc } from './utils.js';
 import { openModal, openModalForSlot } from './modal.js';
 import type { CalendarEvent } from './calendar/types.js';
 
@@ -170,9 +170,16 @@ export function renderWeek(): void {
     );
     const chips = sorted.map(d => {
       const t = normalizeDoneTime(d.time);
-      return `<div class="week-did-chip" title="${esc(d.text)}">
+      const durationHtml = d.duration_minutes
+        ? `<span class="week-did-duration">${fmtDuration(d.duration_minutes)}</span>`
+        : '';
+      const titleAttr = d.duration_minutes
+        ? `${esc(d.text)} · ${fmtDuration(d.duration_minutes)}`
+        : esc(d.text);
+      return `<div class="week-did-chip" title="${titleAttr}">
         <span class="week-did-time">${fmtTime(t)}</span>
         <span class="week-did-text">${esc(d.text)}</span>
+        ${durationHtml}
       </div>`;
     }).join('');
     html += `<div class="week-did-col ${shade}">${chips}</div>`;

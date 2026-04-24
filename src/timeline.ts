@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { fmtTime, normalizeDoneTime, localDateFromIso, addMinutes, getTodayIndex, getTodayDate, TYPE_LABELS, BlockStatus, ENERGY_FIT, FlowBlock, isScheduled, $id, esc } from './utils.js';
+import { fmtTime, fmtDuration, normalizeDoneTime, localDateFromIso, addMinutes, getTodayIndex, getTodayDate, TYPE_LABELS, BlockStatus, ENERGY_FIT, FlowBlock, isScheduled, $id, esc } from './utils.js';
 import { openModal } from './modal.js';
 import { confirmDelete } from './confirm-delete.js';
 import type { CalendarEvent } from './calendar/types.js';
@@ -228,9 +228,12 @@ function renderDoneList(): void {
     return;
   }
 
-  list.innerHTML = todayItems.map(d =>
-    `<div class="done-item">✓ ${esc(d.text)} <span style="float:right;opacity:0.5">${fmtTime(normalizeDoneTime(d.time))}</span></div>`
-  ).join('');
+  list.innerHTML = todayItems.map(d => {
+    const durationHtml = d.duration_minutes
+      ? `<span class="done-duration">${fmtDuration(d.duration_minutes)}</span>`
+      : '';
+    return `<div class="done-item">✓ ${esc(d.text)} <span class="done-meta">${durationHtml}<span class="done-time">${fmtTime(normalizeDoneTime(d.time))}</span></span></div>`;
+  }).join('');
   count.textContent =
     `${todayItems.length} thing${todayItems.length !== 1 ? 's' : ''} done`;
 }
@@ -298,18 +301,19 @@ async function markDone(idx: number): Promise<void> {
   const result = await askCompletionDetails(block);
   if (!result) return;
 
-  await state.updateBlockStatus(idx, 'done', result.completedAt ?? undefined, result.menuItemsDone);
+  await state.updateBlockStatus(idx, 'done', result.completedAt ?? undefined, result.menuItemsDone, result.durationMinutes ?? undefined);
 
   const doneText = result.menuItemsDone.length > 0
     ? result.menuItemsDone.join(', ')
     : title;
-  await state.addDoneItem(doneText, result.completedAt ?? undefined, block.id);
+  await state.addDoneItem(doneText, result.completedAt ?? undefined, block.id, result.durationMinutes ?? undefined);
   renderTimeline();
 }
 
 interface CompletionResult {
   completedAt: Date | null;
   menuItemsDone: string[];
+  durationMinutes: number | null;
 }
 
 function askCompletionDetails(block: FlowBlock): Promise<CompletionResult | null> {
@@ -335,6 +339,16 @@ function askCompletionDetails(block: FlowBlock): Promise<CompletionResult | null
     container.innerHTML = `
       <div class="completion-time-inner">
         ${menuHtml}
+        <p>How long did it take? <span class="completion-optional">(optional)</span></p>
+        <div class="completion-duration-chips">
+          <button type="button" class="completion-duration-chip" data-minutes="15">15m</button>
+          <button type="button" class="completion-duration-chip" data-minutes="30">30m</button>
+          <button type="button" class="completion-duration-chip" data-minutes="60">1h</button>
+          <button type="button" class="completion-duration-chip" data-minutes="120">2h</button>
+        </div>
+        <div class="completion-duration-custom">
+          <input type="number" class="completion-duration-input" min="0" step="5" placeholder="0"> <label>min</label>
+        </div>
         <p>When did you finish?</p>
         <div class="completion-time-options">
           <button class="btn btn-primary completion-now-btn">Just now</button>
@@ -356,10 +370,34 @@ function askCompletionDetails(block: FlowBlock): Promise<CompletionResult | null
       return Array.from(checked).map(cb => block.menu[parseInt(cb.value)]);
     };
 
+    const durationInput = container.querySelector('.completion-duration-input') as HTMLInputElement;
+    const chips = container.querySelectorAll<HTMLButtonElement>('.completion-duration-chip');
+    const syncChips = () => {
+      const current = parseInt(durationInput.value) || 0;
+      chips.forEach(chip => {
+        chip.classList.toggle('selected', parseInt(chip.dataset.minutes!) === current);
+      });
+    };
+    chips.forEach(chip => {
+      chip.addEventListener('click', () => {
+        const mins = parseInt(chip.dataset.minutes!);
+        const current = parseInt(durationInput.value) || 0;
+        durationInput.value = current === mins ? '' : String(mins);
+        syncChips();
+      });
+    });
+    durationInput.addEventListener('input', syncChips);
+
+    const getDurationMinutes = (): number | null => {
+      const v = parseInt(durationInput.value);
+      return Number.isFinite(v) && v > 0 ? v : null;
+    };
+
     container.querySelector('.completion-now-btn')!.addEventListener('click', () => {
       const items = getSelectedItems();
+      const durationMinutes = getDurationMinutes();
       cleanup();
-      resolve({ completedAt: null, menuItemsDone: items });
+      resolve({ completedAt: null, menuItemsDone: items, durationMinutes });
     });
 
     container.querySelector('.completion-earlier-btn')!.addEventListener('click', () => {
@@ -369,8 +407,9 @@ function askCompletionDetails(block: FlowBlock): Promise<CompletionResult | null
       earlier.setHours(h, m, 0, 0);
       if (earlier > now) earlier.setTime(now.getTime());
       const items = getSelectedItems();
+      const durationMinutes = getDurationMinutes();
       cleanup();
-      resolve({ completedAt: earlier, menuItemsDone: items });
+      resolve({ completedAt: earlier, menuItemsDone: items, durationMinutes });
     });
 
     container.querySelector('.completion-cancel-btn')!.addEventListener('click', () => {

@@ -84,6 +84,7 @@ export interface EventPayloads {
     title: string;
     completed_at?: string;
     menu_items_done?: string[];
+    duration_minutes?: number;
   };
   'block.skipped': {
     date: string;
@@ -109,6 +110,7 @@ export interface EventPayloads {
     text: string;
     time: string;
     source_block_id?: string;
+    duration_minutes?: number;
   };
   'reminder.created': {
     name: string;

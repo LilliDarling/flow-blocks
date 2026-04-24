@@ -168,6 +168,15 @@
   text-overflow: ellipsis;
 }
 
+.week-did-chip .week-did-duration {
+  color: var(--text-dim);
+  font-size: 0.58rem;
+  flex-shrink: 0;
+  margin-left: auto;
+  padding-left: 4px;
+  opacity: 0.8;
+}
+
 /* Calendar event detail popover */
 .week-cal-popover {
   z-index: 100;

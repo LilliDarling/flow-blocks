@@ -320,7 +320,7 @@ class AppState {
     return this.completions.get(key) || 'pending';
   }
 
-  async updateBlockStatus(index: number, status: BlockStatus, completedAt?: Date, menuItemsDone?: string[]): Promise<void> {
+  async updateBlockStatus(index: number, status: BlockStatus, completedAt?: Date, menuItemsDone?: string[], durationMinutes?: number): Promise<void> {
     const existing = this.blocks[index];
     if (!existing?.id) return;
     const today = getTodayDate();
@@ -355,6 +355,7 @@ class AppState {
           date, block_type: existing.type, title: existing.title,
           ...(completedAt ? { completed_at: completedAt.toISOString() } : {}),
           ...(menuItemsDone && menuItemsDone.length > 0 ? { menu_items_done: menuItemsDone } : {}),
+          ...(durationMinutes && durationMinutes > 0 ? { duration_minutes: durationMinutes } : {}),
         },
       });
     } else if (status === 'skipped') {
@@ -562,13 +563,15 @@ class AppState {
 
   // --- Done items ---
 
-  async addDoneItem(text: string, completedAt?: Date, sourceBlockId?: string): Promise<void> {
+  async addDoneItem(text: string, completedAt?: Date, sourceBlockId?: string, durationMinutes?: number): Promise<void> {
     const at = completedAt ?? new Date();
     // Store as 24h "HH:MM" so the week view can sort chips by time-of-day.
     const time = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
+    const insertRow: Record<string, unknown> = { user_id: this.userId, text, time };
+    if (durationMinutes && durationMinutes > 0) insertRow.duration_minutes = durationMinutes;
     const { data } = await supabase
       .from('done_items')
-      .insert({ user_id: this.userId, text, time })
+      .insert(insertRow)
       .select()
       .single();
 
@@ -578,7 +581,11 @@ class AppState {
         type: 'done_item.created',
         entity_id: data.id,
         entity_type: null,
-        payload: { text, time, ...(sourceBlockId && { source_block_id: sourceBlockId }) },
+        payload: {
+          text, time,
+          ...(sourceBlockId && { source_block_id: sourceBlockId }),
+          ...(durationMinutes && durationMinutes > 0 ? { duration_minutes: durationMinutes } : {}),
+        },
       });
     }
   }

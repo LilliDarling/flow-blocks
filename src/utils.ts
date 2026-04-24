@@ -145,6 +145,7 @@ export interface DoneItem {
   text: string;
   time: string;
   created_at: string;
+  duration_minutes?: number | null;
 }
 
 export type PomoMode = 'focus' | 'short' | 'long';
@@ -192,6 +193,7 @@ export interface DoneItemRow {
   text: string;
   time: string;
   created_at: string;
+  duration_minutes: number | null;
 }
 
 export interface PomoSettingsRow {
@@ -302,7 +304,13 @@ export function getTodayDate(): string {
 }
 
 export function doneItemFromRow(row: DoneItemRow): DoneItem {
-  return { id: row.id, text: row.text, time: row.time, created_at: row.created_at };
+  return {
+    id: row.id,
+    text: row.text,
+    time: row.time,
+    created_at: row.created_at,
+    duration_minutes: row.duration_minutes,
+  };
 }
 
 export function fmtTime(t: string): string {
@@ -310,6 +318,13 @@ export function fmtTime(t: string): string {
   const ampm = h >= 12 ? 'PM' : 'AM';
   const h12 = h % 12 || 12;
   return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
+}
+
+export function fmtDuration(mins: number): string {
+  if (mins < 60) return `${mins}m`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }
 
 /** Convert a UTC ISO timestamp to the user's local "YYYY-MM-DD". */
