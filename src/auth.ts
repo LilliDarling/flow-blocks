@@ -155,6 +155,56 @@ async function handleGoogleSignIn(): Promise<void> {
   }
 }
 
+async function handleMagicLink(): Promise<void> {
+  clearError();
+  const email = ($id('authEmail') as HTMLInputElement).value.trim();
+
+  if (!email) {
+    showError('Enter your email address first.');
+    return;
+  }
+
+  // shouldCreateUser: false avoids silently creating an account if the user
+  // typoed their email — magic link is for existing accounts only.
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: {
+      shouldCreateUser: false,
+      emailRedirectTo: `${window.location.origin}/`,
+    },
+  });
+
+  if (error) {
+    showError(error.message);
+  } else {
+    showSuccess('Sign-in link sent — check your email.');
+  }
+}
+
+async function handleResendConfirmation(): Promise<void> {
+  clearError();
+  const email = ($id('authEmail') as HTMLInputElement).value.trim();
+
+  if (!email) {
+    showError('Enter the email you signed up with first.');
+    return;
+  }
+
+  const { error } = await supabase.auth.resend({
+    type: 'signup',
+    email,
+    options: {
+      emailRedirectTo: `${window.location.origin}/`,
+    },
+  });
+
+  if (error) {
+    showError(error.message);
+  } else {
+    showSuccess('Confirmation email sent — check your inbox.');
+  }
+}
+
 async function handleSignOut(): Promise<void> {
   await supabase.auth.signOut();
   // Hard reload clears all in-memory state, sessionStorage, and stops event sync.
@@ -170,7 +220,9 @@ export function initAuth(): void {
   $id('authSignIn').addEventListener('click', handleSignIn);
   $id('authSignUp').addEventListener('click', handleSignUp);
   $id('authGoogle').addEventListener('click', handleGoogleSignIn);
+  $id('authMagic').addEventListener('click', handleMagicLink);
   $id('authForgot').addEventListener('click', handleForgotPassword);
+  $id('authResend').addEventListener('click', handleResendConfirmation);
   $id('signOutBtn').addEventListener('click', handleSignOut);
 
   // Password visibility toggle
