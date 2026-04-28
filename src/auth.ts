@@ -68,8 +68,16 @@ function clearError(): void {
 // --- Password toggle ---
 
 function initPasswordToggle(): void {
-  const toggle = $id('authPasswordToggle');
-  const input = $id('authPassword') as HTMLInputElement;
+  wirePasswordToggle('authPasswordToggle', 'authPassword');
+}
+
+function initPasswordRecoveryToggle(): void {
+  wirePasswordToggle('passwordRecoveryToggle', 'passwordRecoveryInput');
+}
+
+function wirePasswordToggle(toggleId: string, inputId: string): void {
+  const toggle = $id(toggleId);
+  const input = $id(inputId) as HTMLInputElement;
   const eyeIcon = toggle.querySelector('.eye-icon') as SVGElement;
   const eyeOffIcon = toggle.querySelector('.eye-off-icon') as SVGElement;
 
@@ -181,6 +189,52 @@ async function handleMagicLink(): Promise<void> {
   }
 }
 
+// --- Password recovery (post-reset-email click) ---
+
+function showPasswordRecoveryModal(): void {
+  const modal = $id('passwordRecoveryModal');
+  modal.classList.add('open');
+  const input = $id('passwordRecoveryInput') as HTMLInputElement;
+  input.value = '';
+  const err = $id('passwordRecoveryError');
+  err.textContent = '';
+  err.style.display = 'none';
+  setTimeout(() => input.focus(), 50);
+}
+
+function hidePasswordRecoveryModal(): void {
+  $id('passwordRecoveryModal').classList.remove('open');
+}
+
+async function handlePasswordRecoverySave(): Promise<void> {
+  const input = $id('passwordRecoveryInput') as HTMLInputElement;
+  const err = $id('passwordRecoveryError');
+  const password = input.value;
+
+  if (!password || password.length < 6) {
+    err.textContent = 'Password must be at least 6 characters.';
+    err.style.display = 'block';
+    return;
+  }
+
+  const saveBtn = $id('passwordRecoverySave') as HTMLButtonElement;
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Saving…';
+
+  const { error } = await supabase.auth.updateUser({ password });
+
+  saveBtn.disabled = false;
+  saveBtn.textContent = 'Save password';
+
+  if (error) {
+    err.textContent = error.message;
+    err.style.display = 'block';
+    return;
+  }
+
+  hidePasswordRecoveryModal();
+}
+
 async function handleResendConfirmation(): Promise<void> {
   clearError();
   const email = ($id('authEmail') as HTMLInputElement).value.trim();
@@ -225,6 +279,14 @@ export function initAuth(): void {
   $id('authResend').addEventListener('click', handleResendConfirmation);
   $id('signOutBtn').addEventListener('click', handleSignOut);
 
+  // Password recovery modal wiring
+  $id('passwordRecoverySave').addEventListener('click', handlePasswordRecoverySave);
+  $id('passwordRecoveryCancel').addEventListener('click', hidePasswordRecoveryModal);
+  $id('passwordRecoveryInput').addEventListener('keydown', (e) => {
+    if ((e as KeyboardEvent).key === 'Enter') handlePasswordRecoverySave();
+  });
+  initPasswordRecoveryToggle();
+
   // Password visibility toggle
   initPasswordToggle();
 
@@ -234,7 +296,13 @@ export function initAuth(): void {
   });
 
   // Listen for auth state changes (fires after initial check too)
-  supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
+  supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
+    if (event === 'PASSWORD_RECOVERY') {
+      // Recovery link click — they're signed in via a recovery session, prompt
+      // for a new password before they go further. Skipping is allowed; the
+      // old password keeps working until they choose a new one.
+      showPasswordRecoveryModal();
+    }
     if (session?.user) {
       // Don't call showApp() here — let onUserSignedIn do it after data loads.
       // But if auth changes AFTER initial load (e.g. sign-in from auth screen),

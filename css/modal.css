@@ -40,6 +40,13 @@
   color: var(--ink);
 }
 
+.modal-subtitle {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ink-2);
+  margin: calc(-1 * var(--sp-3)) 0 var(--sp-4);
+}
+
 .modal-error {
   display: none;
   font-family: var(--display-font);
