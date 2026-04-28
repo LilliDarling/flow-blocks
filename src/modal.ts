@@ -178,6 +178,9 @@ function selectType(type: string): void {
   $id('typeDescription').textContent = TYPE_DESCRIPTIONS[type as BlockType] || '';
 }
 
+const MAX_CHIPS = 8;
+const MAX_PERSONAL_CHIPS = 5; // leave room for built-in variety
+
 function renderMenuSuggestions(type: BlockType): void {
   const container = $id('menuSuggestions');
   if (!container) return;
@@ -185,34 +188,34 @@ function renderMenuSuggestions(type: BlockType): void {
   const menuInput = $id('blockMenu') as HTMLTextAreaElement;
   const currentItems = menuInput.value.split('\n').map(s => s.trim().toLowerCase()).filter(Boolean);
 
-  const pastItems = new Set<string>();
+  // Count how often each menu item appears across the user's blocks of this
+  // type — frequency = "what they commonly put in that category".
+  const personalCounts = new Map<string, { display: string; count: number }>();
   for (const block of state.blocks) {
-    if (block.type === type && block.menu) {
-      for (const item of block.menu) {
-        if (!currentItems.includes(item.toLowerCase())) {
-          pastItems.add(item);
-        }
-      }
+    if (block.type !== type || !block.menu) continue;
+    for (const item of block.menu) {
+      const key = item.toLowerCase();
+      if (currentItems.includes(key)) continue;
+      const existing = personalCounts.get(key);
+      if (existing) existing.count++;
+      else personalCounts.set(key, { display: item, count: 1 });
     }
   }
 
-  const suggestions: string[] = [];
-  const seen = new Set<string>();
+  const personalSorted = [...personalCounts.values()]
+    .sort((a, b) => b.count - a.count)
+    .slice(0, MAX_PERSONAL_CHIPS)
+    .map(p => p.display);
 
-  for (const item of pastItems) {
-    const key = item.toLowerCase();
-    if (!seen.has(key)) {
-      seen.add(key);
-      suggestions.push(item);
-    }
-  }
+  const suggestions: string[] = [...personalSorted];
+  const seen = new Set(personalSorted.map(s => s.toLowerCase()));
 
   for (const item of (BLOCK_MENU_SUGGESTIONS[type] || [])) {
+    if (suggestions.length >= MAX_CHIPS) break;
     const key = item.toLowerCase();
-    if (!seen.has(key) && !currentItems.includes(key)) {
-      seen.add(key);
-      suggestions.push(item);
-    }
+    if (seen.has(key) || currentItems.includes(key)) continue;
+    seen.add(key);
+    suggestions.push(item);
   }
 
   if (suggestions.length === 0) {
@@ -220,11 +223,11 @@ function renderMenuSuggestions(type: BlockType): void {
     return;
   }
 
-  const pastCount = pastItems.size;
+  const personalCount = personalSorted.length;
   container.innerHTML =
     `<div class="menu-suggestions-label">Tap to add:</div>` +
     suggestions.map((s, i) =>
-      `<button type="button" class="menu-chip${i < pastCount ? ' menu-chip-personal' : ''}" data-menu-item="${esc(s)}">${esc(s)}</button>`
+      `<button type="button" class="menu-chip${i < personalCount ? ' menu-chip-personal' : ''}" data-menu-item="${esc(s)}">${esc(s)}</button>`
     ).join('');
 }
 
