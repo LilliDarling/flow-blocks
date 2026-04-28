@@ -1,4 +1,5 @@
 import { $id } from './utils.js';
+import { isNative } from './native.js';
 
 /** Captured `beforeinstallprompt` event — available until the user installs or dismisses. */
 let deferredPrompt: Event & { prompt(): Promise<void>; userChoice: Promise<{ outcome: string }> } | null = null;
@@ -110,6 +111,10 @@ function markUpdateReady(): void {
 // --- Init ---
 
 export function initPWA(): void {
+  // Native shells already are the installed app — no SW, no install banner,
+  // no in-app update flow (updates ship through the store).
+  if (isNative) return;
+
   // Capture the install prompt before the browser shows it
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();

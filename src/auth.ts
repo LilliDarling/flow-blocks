@@ -1,6 +1,9 @@
 import { supabase } from './supabase.js';
 import { $id } from './utils.js';
+import { isNative } from './native.js';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
+
+const NATIVE_OAUTH_REDIRECT = 'wildbloom://auth/callback';
 
 type AuthCallback = (userId: string | null) => void;
 
@@ -132,7 +135,7 @@ async function handleForgotPassword(): Promise<void> {
   }
 
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/`,
+    redirectTo: isNative ? NATIVE_OAUTH_REDIRECT : `${window.location.origin}/`,
   });
 
   if (error) {
@@ -144,6 +147,26 @@ async function handleForgotPassword(): Promise<void> {
 
 async function handleGoogleSignIn(): Promise<void> {
   clearError();
+
+  if (isNative) {
+    // Native: get the OAuth URL from Supabase, then open it in an in-app browser.
+    // Supabase will redirect back to `wildbloom://auth/callback` which the
+    // appUrlOpen listener in native.ts captures to set the session.
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: NATIVE_OAUTH_REDIRECT,
+        skipBrowserRedirect: true,
+      },
+    });
+    if (error) { showError(error.message); return; }
+    if (!data?.url) { showError('Could not start Google sign-in.'); return; }
+
+    const { Browser } = await import('@capacitor/browser');
+    await Browser.open({ url: data.url, presentationStyle: 'popover' });
+    return;
+  }
+
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {

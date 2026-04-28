@@ -18,6 +18,7 @@ import { renderReminders, initReminderEvents, scheduleReminders } from './routin
 import { initDeleteConfirmEvents } from './confirm-delete.js';
 import { initPWA } from './pwa.js';
 import { subscribeToPush } from './push.js';
+import { initNative } from './native.js';
 import { initEvents, emit, startSyncLoop, stopSyncLoop, onSyncHealthChange, getSyncHealth, SyncHealth } from './events.js';
 import { renderDayInsights, renderPatternInsights, initInsightEvents, invalidateInsightCache } from './insights.js';
 import { initQuickStart } from './quickstart.js';
@@ -604,6 +605,10 @@ navigator.serviceWorker?.addEventListener('message', (e) => {
 });
 
 document.addEventListener('DOMContentLoaded', () => {
+  // initNative is fire-and-forget: it sets up deep-link listeners for OAuth
+  // callbacks, configures the status bar, and dismisses the native splash.
+  // Must run before initAuth so a freshly-resumed app catches the redirect.
+  initNative();
   initPWA();
   initAuth();
 
