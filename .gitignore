@@ -1,3 +1,15 @@
 node_modules/
 dist/
+
+# Environment / secrets — `.env` is committed (placeholders only); `.env.local`
+# and friends are dev-machine overrides that may hold real credentials.
 .env
+.env.local
+.env.*.local
+
+# Source maps — never ship them; never commit them. Belt & suspenders to the
+# `sourcemap: false` in vite.config.ts and `noEmit: true` in tsconfig.json.
+*.map
+
+# OS / editor cruft
+.DS_Store

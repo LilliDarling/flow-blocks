@@ -178,6 +178,11 @@
 
 .save-banner.show { transform: translateX(-50%) translateY(0); }
 
+.save-banner.save-banner-error {
+  background: var(--danger);
+  color: var(--bg);
+}
+
 /* ── Mobile-first tweaks for views ── */
 @media (max-width: 768px) {
   .app-header { padding: var(--sp-4) 0 var(--sp-3); }

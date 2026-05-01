@@ -9,6 +9,14 @@ export const googleProvider: CalendarProvider = {
   name: 'Google Calendar',
 
   startAuth(): void {
+    // CSRF protection: random state stored in sessionStorage, echoed by Google,
+    // verified on callback. Without this, an attacker could feed a victim a
+    // crafted /auth/google/callback?code=… link to attach an attacker-owned
+    // Google account to the victim's session.
+    const state = crypto.randomUUID();
+    sessionStorage.setItem('oauth_state', state);
+    sessionStorage.setItem('oauth_provider', 'google');
+
     const params = new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
       redirect_uri: REDIRECT_URI,
@@ -16,6 +24,7 @@ export const googleProvider: CalendarProvider = {
       scope: 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/userinfo.email',
       access_type: 'offline',
       prompt: 'select_account consent',
+      state,
     });
     window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
   },
@@ -117,13 +126,14 @@ export const googleProvider: CalendarProvider = {
   async refreshToken(connection: CalendarConnection): Promise<{ access_token: string; expires_at: string } | null> {
     if (!connection.refresh_token) return null;
 
-    // Token refresh goes through edge function only — client secret stays server-side
+    // Token refresh goes through edge function only — client secret AND
+    // refresh_token stay server-side; the function looks the refresh token up
+    // by connection_id after verifying the caller owns the connection.
     try {
       const { data, error } = await supabase.functions.invoke('calendar-token-refresh', {
         body: {
           provider: 'google',
           connection_id: connection.id,
-          refresh_token: connection.refresh_token,
         },
       });
 

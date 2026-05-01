@@ -1,6 +1,6 @@
 import { supabase } from './supabase.js';
 import { state } from './state.js';
-import { $id, valueToTier, EnergyTier, esc } from './utils.js';
+import { $id, valueToTier, EnergyTier, esc, localDateFromIso } from './utils.js';
 
 // ────────────────────────────────────────────────────────────
 // Types
@@ -95,18 +95,22 @@ export function invalidateInsightCache(): void {
 // ────────────────────────────────────────────────────────────
 
 function detectCompletionStreak(events: EventRow[]): Insight[] {
+  // Bucket completions by the user's LOCAL date. occurred_at is UTC, so a
+  // block completed at 11pm local in a UTC- timezone would land on the next
+  // UTC day and break the streak. localDateFromIso uses the device's TZ to
+  // match `getTodayDate()`.
   const completionDates = new Set<string>();
   for (const e of events) {
     if (e.type === 'block.completed') {
-      completionDates.add(e.occurred_at.slice(0, 10));
+      completionDates.add(localDateFromIso(e.occurred_at));
     }
   }
 
-  // Count consecutive days backwards from today
+  // Count consecutive days backwards from today (local).
   let streak = 0;
   const d = new Date();
   while (true) {
-    const dateStr = d.toISOString().slice(0, 10);
+    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     if (completionDates.has(dateStr)) {
       streak++;
       d.setDate(d.getDate() - 1);
@@ -313,7 +317,10 @@ function edgeFromInsight(insight: Insight): [string, string] {
   const parts = insight.id.split(':');
   switch (insight.category) {
     case 'completion_streak':
-      return ['streak:current', `days:${parts[1]}`];
+      // id is the literal 'streak:current' — the count is on evidenceCount,
+      // not in the id. Parsing parts[1] previously ground out to the string
+      // "current", collapsing every streak length onto a single graph node.
+      return ['streak:current', `days:${insight.evidenceCount}`];
     case 'energy_block_correlation':
       return [`energy:${parts[2]}`, `complete:${parts[1]}`];
     case 'dow_skip_pattern':

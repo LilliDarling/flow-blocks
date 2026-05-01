@@ -3,7 +3,7 @@ import {
   FlowBlock, DoneItem, PomoMode, PomoSettings, PomoSession, PomoSessionRow,
   BlockStatus, CompletionRow, EnergyLogRow,
   Reminder, ReminderRow, ReminderCompletionRow, ReminderTimeSuggestion, reminderFromRow,
-  blockFromRow, doneItemFromRow, getTodayDate, getDateForDayIndex, valueToTier,
+  blockFromRow, doneItemFromRow, getTodayDate, getDateOffsetFromToday, getDateForDayIndex, localDateFromIso, toMinutes, parseTime, valueToTier,
   isScheduled,
 } from './utils.js';
 
@@ -26,11 +26,6 @@ export interface PomoState {
   streak: number;
   soundOn: boolean;
   settings: PomoSettings;
-}
-
-function toMin(t: string): number {
-  const [h, m] = t.split(':').map(Number);
-  return h * 60 + m;
 }
 
 function fromMin(mins: number): string {
@@ -77,59 +72,19 @@ class AppState {
   async load(userId: string): Promise<void> {
     this.userId = userId;
 
-    // Fetch blocks: all recurring + one-off blocks from last 7 days
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 7);
-    const cutoffDate = cutoff.toISOString().slice(0, 10);
+    // Volatile data shared with refresh() — blocks, completions, energy,
+    // done_items, reminders, pomo sessions.
+    await this.fetchVolatileData();
 
-    const { data: blockRows } = await supabase
-      .from('blocks')
-      .select('*')
-      .eq('user_id', userId)
-      .or(`block_date.is.null,block_date.gte.${cutoffDate}`)
-      .order('start_time');
-    this.blocks = (blockRows || []).map(blockFromRow);
+    // ── One-time setup below: heavy or rarely-changing reads that don't
+    //    need to run on every focus event.
 
-    // Fetch the last 7 days of completions for recurring blocks so the week
-    // view can show what was done on each day.
-    const recurringIds = this.blocks.filter(b => !b.date && b.id).map(b => b.id!);
-    if (recurringIds.length > 0) {
-      const { data: compRows } = await supabase
-        .from('block_completions')
-        .select('*')
-        .in('block_id', recurringIds)
-        .gte('completion_date', cutoffDate);
-      this.completions.clear();
-      for (const row of (compRows || []) as CompletionRow[]) {
-        this.completions.set(`${row.block_id}_${row.completion_date}`, row.status as BlockStatus);
-      }
-    }
-
-    // Fetch energy logs (last 14 days for analytics)
-    await this.loadEnergyLogs();
-
-    // Restore the most recent energy value
-    if (this.energyLogs.length > 0) {
-      this.energy = this.energyLogs[this.energyLogs.length - 1].value;
-    }
-
-    // Load calendar connections + events
+    // Calendar connections + today's events. Involves OAuth-token paths and
+    // multiple Google API calls — not cheap to re-run on focus.
     this.loadHiddenCalendarEvents();
     await this.loadCalendar();
 
-    // Fetch done items for the last 7 days (for the week view recap)
-    const weekStart = new Date();
-    weekStart.setDate(weekStart.getDate() - 7);
-    weekStart.setHours(0, 0, 0, 0);
-    const { data: doneRows } = await supabase
-      .from('done_items')
-      .select('*')
-      .eq('user_id', userId)
-      .gte('created_at', weekStart.toISOString())
-      .order('created_at', { ascending: true });
-    this.doneItems = (doneRows || []).map(doneItemFromRow);
-
-    // Fetch pomo settings
+    // Pomo settings change rarely; refresh() doesn't re-fetch.
     const { data: pomoRow } = await supabase
       .from('pomo_settings')
       .select('*')
@@ -147,32 +102,38 @@ class AppState {
         longAfter: pomoRow.long_after,
       };
     }
-
-    // Fetch today's pomo sessions (from all devices)
-    await this.loadPomoSessions();
-
-    // Fetch reminders + today's completions
-    await this.loadReminders();
   }
 
   /** Lightweight re-sync of volatile data when the app regains focus.
    *  Skips heavy one-time setup (calendar OAuth, pomo settings). */
   async refresh(): Promise<void> {
     if (!this.userId) return;
+    await this.fetchVolatileData();
+  }
 
-    // Re-fetch blocks
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 7);
-    const cutoffDate = cutoff.toISOString().slice(0, 10);
+  /** Shared between load() and refresh(). Fetches data that changes during
+   *  normal use — blocks, completions, energy, done_items, reminders, pomo
+   *  sessions. Caller must set `this.userId` first. */
+  private async fetchVolatileData(): Promise<void> {
+    const userId = this.userId!;
+
+    // Cutoff is in local time to match block_date / completion_date, which
+    // the client stores as local YYYY-MM-DD.
+    const cutoffDate = getDateOffsetFromToday(7);
+
+    // Blocks: all recurring + one-off blocks from the last 7 days.
     const { data: blockRows } = await supabase
       .from('blocks')
       .select('*')
-      .eq('user_id', this.userId)
+      .eq('user_id', userId)
       .or(`block_date.is.null,block_date.gte.${cutoffDate}`)
       .order('start_time');
     this.blocks = (blockRows || []).map(blockFromRow);
 
-    // Re-fetch completions (last 7 days, for the week view)
+    // Completions for recurring blocks (last 7 days) — populates the week
+    // view's per-day status. Always reset the map so a deleted recurring
+    // block's stale completions don't linger after a refresh.
+    this.completions.clear();
     const recurringIds = this.blocks.filter(b => !b.date && b.id).map(b => b.id!);
     if (recurringIds.length > 0) {
       const { data: compRows } = await supabase
@@ -180,34 +141,33 @@ class AppState {
         .select('*')
         .in('block_id', recurringIds)
         .gte('completion_date', cutoffDate);
-      this.completions.clear();
       for (const row of (compRows || []) as CompletionRow[]) {
         this.completions.set(`${row.block_id}_${row.completion_date}`, row.status as BlockStatus);
       }
     }
 
-    // Re-fetch energy
+    // Energy logs (14 days for analytics) and most-recent value.
     await this.loadEnergyLogs();
     if (this.energyLogs.length > 0) {
       this.energy = this.energyLogs[this.energyLogs.length - 1].value;
     }
 
-    // Re-fetch done items (last 7 days, for the week view recap)
+    // Done items (last 7 days for the week-view recap).
     const weekStart = new Date();
     weekStart.setDate(weekStart.getDate() - 7);
     weekStart.setHours(0, 0, 0, 0);
     const { data: doneRows } = await supabase
       .from('done_items')
       .select('*')
-      .eq('user_id', this.userId)
+      .eq('user_id', userId)
       .gte('created_at', weekStart.toISOString())
       .order('created_at', { ascending: true });
     this.doneItems = (doneRows || []).map(doneItemFromRow);
 
-    // Re-fetch reminders + completions/skips
+    // Reminders + today's completions/skips.
     await this.loadReminders();
 
-    // Re-fetch pomo sessions
+    // Today's pomo sessions (synced across devices).
     await this.loadPomoSessions();
   }
 
@@ -250,35 +210,33 @@ class AppState {
       .select()
       .single();
 
-    if (error) {
+    if (error || !data) {
       // Server-side validation (length/range/pool-cap triggers) rejected
       // this insert. Surface so the caller can warn the user instead of
-      // silently failing.
-      console.warn('[state] addBlock rejected by server:', error.message);
+      // silently mutating local state.
+      console.warn('[state] addBlock rejected by server:', error?.message);
       return false;
     }
 
-    if (data) {
-      this.blocks.push(blockFromRow(data));
-      emit({
-        type: 'block.created',
-        entity_id: data.id,
-        entity_type: 'block',
-        payload: {
-          type: block.type, title: block.title, menu: block.menu,
-          start_time: block.start, duration: block.duration,
-          days: block.days, block_date: block.date,
-          linked_event_id: block.linked_event_id, source,
-        },
-      });
-    }
+    this.blocks.push(blockFromRow(data));
+    emit({
+      type: 'block.created',
+      entity_id: data.id,
+      entity_type: 'block',
+      payload: {
+        type: block.type, title: block.title, menu: block.menu,
+        start_time: block.start, duration: block.duration,
+        days: block.days, block_date: block.date,
+        linked_event_id: block.linked_event_id, source,
+      },
+    });
     this.showSaveBanner();
     return true;
   }
 
-  async updateBlock(index: number, block: FlowBlock, source: MutationSource = 'manual'): Promise<void> {
+  async updateBlock(index: number, block: FlowBlock, source: MutationSource = 'manual'): Promise<boolean> {
     const existing = this.blocks[index];
-    if (!existing?.id) return;
+    if (!existing?.id) return false;
 
     const before = {
       type: existing.type, title: existing.title, menu: existing.menu,
@@ -302,24 +260,29 @@ class AppState {
       .select()
       .single();
 
-    if (!error && data) {
-      this.blocks[index] = blockFromRow(data);
-      const after = {
-        type: block.type, title: block.title, menu: block.menu,
-        start: block.start, duration: block.duration,
-        days: block.days, date: block.date, status: block.status,
-      };
-      const changes = diff(before as Record<string, unknown>, after as Record<string, unknown>);
-      if (Object.keys(changes).length > 0) {
-        emit({
-          type: 'block.updated',
-          entity_id: existing.id,
-          entity_type: 'block',
-          payload: { changes, source },
-        });
-      }
+    if (error || !data) {
+      console.warn('[state] updateBlock failed:', error?.message);
+      this.showSaveBanner({ error: true });
+      return false;
+    }
+
+    this.blocks[index] = blockFromRow(data);
+    const after = {
+      type: block.type, title: block.title, menu: block.menu,
+      start: block.start, duration: block.duration,
+      days: block.days, date: block.date, status: block.status,
+    };
+    const changes = diff(before as Record<string, unknown>, after as Record<string, unknown>);
+    if (Object.keys(changes).length > 0) {
+      emit({
+        type: 'block.updated',
+        entity_id: existing.id,
+        entity_type: 'block',
+        payload: { changes, source },
+      });
     }
     this.showSaveBanner();
+    return true;
   }
 
   async deleteBlock(index: number, source: MutationSource = 'manual'): Promise<void> {
@@ -350,14 +313,19 @@ class AppState {
     return this.completions.get(key) || 'pending';
   }
 
-  async updateBlockStatus(index: number, status: BlockStatus, completedAt?: Date, menuItemsDone?: string[], durationMinutes?: number): Promise<void> {
+  async updateBlockStatus(index: number, status: BlockStatus, completedAt?: Date, menuItemsDone?: string[], durationMinutes?: number): Promise<boolean> {
     const existing = this.blocks[index];
-    if (!existing?.id) return;
+    if (!existing?.id) return false;
     const today = getTodayDate();
 
     if (existing.date || existing.days.length === 0) {
       // One-off block (dated or unscheduled pool item): update the block row directly
-      await supabase.from('blocks').update({ status }).eq('id', existing.id);
+      const { error } = await supabase.from('blocks').update({ status }).eq('id', existing.id);
+      if (error) {
+        console.warn('[state] updateBlockStatus (block) failed:', error.message);
+        this.showSaveBanner({ error: true });
+        return false;
+      }
       this.blocks[index].status = status;
     } else {
       // Recurring block: upsert into block_completions for today
@@ -367,9 +335,14 @@ class AppState {
         status,
       };
       if (completedAt) row.completed_at = completedAt.toISOString();
-      await supabase
+      const { error } = await supabase
         .from('block_completions')
         .upsert(row, { onConflict: 'block_id,completion_date' });
+      if (error) {
+        console.warn('[state] updateBlockStatus (completion) failed:', error.message);
+        this.showSaveBanner({ error: true });
+        return false;
+      }
       this.completions.set(`${existing.id}_${today}`, status);
     }
 
@@ -403,6 +376,7 @@ class AppState {
         payload: { date, block_type: existing.type, title: existing.title },
       });
     }
+    return true;
   }
 
   // --- Calendar ---
@@ -455,8 +429,8 @@ class AppState {
       }
 
       // Event still exists — check if its time changed and update buffer accordingly
-      const evStartMin = toMin(event.start);
-      const evEndMin = toMin(event.end);
+      const evStartMin = toMinutes(event.start);
+      const evEndMin = toMinutes(event.end);
       const isBefore = block.title.startsWith('Buffer before');
       const expectedStart = isBefore
         ? fromMin(evStartMin - block.duration)
@@ -542,9 +516,12 @@ class AppState {
     const today = getTodayDate();
     const newIds = eventIds.filter(id => !this.calSyncSeenIds.has(id));
     if (newIds.length === 0) return;
+    // ignoreDuplicates → ON CONFLICT DO NOTHING. Without it Supabase emits
+    // ON CONFLICT DO UPDATE, which RLS blocks on this table (no UPDATE policy
+    // — the row content never changes once "seen", so plain dedupe is correct).
     await supabase.from('cal_event_seen').upsert(
       newIds.map(id => ({ user_id: this.userId, event_id: id, seen_date: today })),
-      { onConflict: 'user_id,event_id,seen_date' },
+      { onConflict: 'user_id,event_id,seen_date', ignoreDuplicates: true },
     );
     for (const id of newIds) this.calSyncSeenIds.add(id);
   }
@@ -812,17 +789,22 @@ class AppState {
     return reminder.id ? this.reminderCompletions.has(reminder.id) : false;
   }
 
-  async toggleReminderCompletion(reminder: Reminder): Promise<void> {
-    if (!reminder.id) return;
+  async toggleReminderCompletion(reminder: Reminder): Promise<boolean> {
+    if (!reminder.id) return false;
     const today = getTodayDate();
 
     if (this.reminderCompletions.has(reminder.id)) {
       // Uncomplete
-      await supabase
+      const { error } = await supabase
         .from('reminder_completions')
         .delete()
         .eq('reminder_id', reminder.id)
         .eq('completion_date', today);
+      if (error) {
+        console.warn('[state] reminder uncomplete failed:', error.message);
+        this.showSaveBanner({ error: true });
+        return false;
+      }
       this.reminderCompletions.delete(reminder.id);
       emit({
         type: 'reminder.uncompleted',
@@ -832,9 +814,14 @@ class AppState {
       });
     } else {
       // Complete
-      await supabase
+      const { error } = await supabase
         .from('reminder_completions')
         .insert({ reminder_id: reminder.id, completion_date: today });
+      if (error) {
+        console.warn('[state] reminder complete failed:', error.message);
+        this.showSaveBanner({ error: true });
+        return false;
+      }
       this.reminderCompletions.add(reminder.id);
       emit({
         type: 'reminder.completed',
@@ -843,22 +830,28 @@ class AppState {
         payload: { date: today, reminder_name: reminder.name },
       });
     }
+    return true;
   }
 
   isReminderSkippedToday(reminder: Reminder): boolean {
     return reminder.id ? this.reminderSkips.has(reminder.id) : false;
   }
 
-  async toggleReminderSkip(reminder: Reminder): Promise<void> {
-    if (!reminder.id) return;
+  async toggleReminderSkip(reminder: Reminder): Promise<boolean> {
+    if (!reminder.id) return false;
     const today = getTodayDate();
 
     if (this.reminderSkips.has(reminder.id)) {
-      await supabase
+      const { error } = await supabase
         .from('reminder_skips')
         .delete()
         .eq('reminder_id', reminder.id)
         .eq('skip_date', today);
+      if (error) {
+        console.warn('[state] reminder unskip failed:', error.message);
+        this.showSaveBanner({ error: true });
+        return false;
+      }
       this.reminderSkips.delete(reminder.id);
       emit({
         type: 'reminder.unskipped',
@@ -867,9 +860,14 @@ class AppState {
         payload: { date: today, reminder_name: reminder.name },
       });
     } else {
-      await supabase
+      const { error } = await supabase
         .from('reminder_skips')
         .insert({ reminder_id: reminder.id, skip_date: today });
+      if (error) {
+        console.warn('[state] reminder skip failed:', error.message);
+        this.showSaveBanner({ error: true });
+        return false;
+      }
       this.reminderSkips.add(reminder.id);
       emit({
         type: 'reminder.skipped',
@@ -878,13 +876,13 @@ class AppState {
         payload: { date: today, reminder_name: reminder.name },
       });
     }
+    return true;
   }
 
   /** Load the last 7 days of reminder completion timestamps. */
   async loadReminderCompletionHistory(): Promise<void> {
-    const since = new Date();
-    since.setDate(since.getDate() - 7);
-    const sinceDate = since.toISOString().slice(0, 10);
+    // Local-date cutoff: completion_date is `date` typed and stored local.
+    const sinceDate = getDateOffsetFromToday(7);
 
     const reminderIds = this.reminders.filter(r => r.id).map(r => r.id!);
     if (reminderIds.length === 0) {
@@ -926,8 +924,7 @@ class AppState {
       const avgMinutes = Math.round(totalMinutes / completions.length);
 
       // Parse scheduled time
-      const [sh, sm] = reminder.time.split(':').map(Number);
-      const scheduledMinutes = sh * 60 + sm;
+      const scheduledMinutes = toMinutes(reminder.time);
 
       // Only suggest if the difference is 15+ minutes
       const diff = Math.abs(avgMinutes - scheduledMinutes);
@@ -970,7 +967,8 @@ class AppState {
 
     const since = new Date();
     since.setDate(since.getDate() - 60);
-    const sinceStr = since.toISOString().slice(0, 10);
+    // completion_date is local; logged_at is timestamptz. Use the matching format for each.
+    const sinceLocalDate = getDateOffsetFromToday(60);
 
     const blockIds = this.blocks.filter(b => b.id).map(b => b.id!);
 
@@ -980,7 +978,7 @@ class AppState {
           .from('block_completions')
           .select('completion_date')
           .in('block_id', blockIds)
-          .gte('completion_date', sinceStr)
+          .gte('completion_date', sinceLocalDate)
           .eq('status', 'done')
       : { data: [] };
 
@@ -996,7 +994,9 @@ class AppState {
       activeDates.add(row.completion_date);
     }
     for (const row of (energyRows || []) as { logged_at: string }[]) {
-      activeDates.add(row.logged_at.slice(0, 10));
+      // logged_at is UTC; bucket by the user's local day so the streak walk
+      // (which is in local time) lines up.
+      activeDates.add(localDateFromIso(row.logged_at));
     }
     // One-off blocks marked done
     for (const b of this.blocks) {
@@ -1026,11 +1026,15 @@ class AppState {
 
   // --- UI ---
 
-  showSaveBanner(): void {
+  showSaveBanner(opts?: { error?: boolean; message?: string }): void {
     const banner = document.getElementById('saveBanner');
     if (!banner) return;
+    const isError = !!opts?.error;
+    banner.textContent = opts?.message ?? (isError ? "Couldn't save — try again" : 'Changes saved');
+    banner.classList.toggle('save-banner-error', isError);
     banner.classList.add('show');
-    setTimeout(() => banner.classList.remove('show'), 1500);
+    // Errors hang around longer so the user actually catches them.
+    setTimeout(() => banner.classList.remove('show'), isError ? 3000 : 1500);
   }
 }
 

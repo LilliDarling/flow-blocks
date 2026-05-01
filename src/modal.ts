@@ -1,5 +1,5 @@
 import { state, POOL_MAX_ACTIVE } from './state.js';
-import { DAYS, BlockType, FlowBlock, fmtTime, addMinutes, isScheduled, $id, getTodayIndex, getTodayDate, getDateForDayIndex, TYPE_LABELS, TYPE_DESCRIPTIONS, BLOCK_TYPE_KEYWORDS, BLOCK_MENU_SUGGESTIONS, esc } from './utils.js';
+import { DAYS, BlockType, FlowBlock, fmtTime, addMinutes, toMinutes, isScheduled, $id, getTodayIndex, getTodayDate, getDateForDayIndex, TYPE_LABELS, TYPE_DESCRIPTIONS, BLOCK_TYPE_KEYWORDS, BLOCK_MENU_SUGGESTIONS, esc } from './utils.js';
 import { renderTimeline } from './timeline.js';
 import { renderWeek } from './week.js';
 import { confirmDelete } from './confirm-delete.js';
@@ -279,11 +279,6 @@ function toggleDay(i: number): void {
     state.selectedDays.push(i);
   }
   renderDayPickers();
-}
-
-function toMinutes(t: string): number {
-  const [h, m] = t.split(':').map(Number);
-  return h * 60 + m;
 }
 
 function findOverlap(start: string, duration: number, days: number[], date: string | null): FlowBlock | null {

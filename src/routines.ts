@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { DAYS, Reminder, ReminderTimeSuggestion, fmtTime, getTodayIndex, getTodayDate, $id, esc } from './utils.js';
+import { DAYS, Reminder, ReminderTimeSuggestion, fmtTime, parseTime, getTodayIndex, getTodayDate, $id, esc } from './utils.js';
 import { confirmDelete } from './confirm-delete.js';
 import { requestNotificationPermission, subscribeToPush } from './push.js';
 
@@ -73,9 +73,9 @@ export function scheduleReminders(fireMissed = false): void {
     if (state.isReminderCompletedToday(reminder)) continue;
     if (state.isReminderSkippedToday(reminder)) continue;
 
-    const [h, m] = reminder.time.split(':').map(Number);
+    const { hours, minutes } = parseTime(reminder.time);
     const reminderDate = new Date();
-    reminderDate.setHours(h, m, 0, 0);
+    reminderDate.setHours(hours, minutes, 0, 0);
 
     const diff = reminderDate.getTime() - now.getTime();
 

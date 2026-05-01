@@ -2,7 +2,7 @@ import './app.css';
 import { state } from './state.js';
 import {
   $id, EnergyTier, ENERGY_TIER_VALUE, ENERGY_FIT,
-  energySuggestion, valueToTier, fmtTime, addMinutes, getTodayIndex, getTodayDate,
+  energySuggestion, valueToTier, fmtTime, addMinutes, toMinutes, getTodayIndex, getTodayDate,
   FlowBlock, TYPE_LABELS, isScheduled, esc,
 } from './utils.js';
 import { renderTimeline, initTimelineEvents } from './timeline.js';
@@ -73,7 +73,7 @@ function setEnergyTier(tier: EnergyTier, log = true): void {
   if (log) {
     state.logEnergy(value);
     lastEnergyLogTime = Date.now();
-    hideCheckinToast();
+    dismissCheckinPopup();
     showReorderSuggestion(value);
     showPoolPrompt(value);
   }
@@ -144,8 +144,7 @@ function showReorderSuggestion(energy: number): void {
     if (!isToday) return false;
     const status = state.getEffectiveStatus(b, today);
     if (status !== 'pending') return false;
-    const [h, m] = b.start.split(':').map(Number);
-    return h * 60 + m > nowMinutes;
+    return toMinutes(b.start) > nowMinutes;
   });
 
   if (pendingBlocks.length < 2) {
@@ -273,9 +272,6 @@ function dismissCheckinPopup(): void {
     checkinOverlay.remove();
     checkinOverlay = null;
   }
-  // Also hide the old toast if it's showing
-  const toast = $id('energyCheckinToast');
-  if (toast) toast.style.display = 'none';
 }
 
 function getCheckinGreeting(): string {
@@ -283,17 +279,6 @@ function getCheckinGreeting(): string {
   if (h < 12) return 'Good morning';
   if (h < 17) return 'Good afternoon';
   return 'Good evening';
-}
-
-// Keep old toast functions for notification-triggered check-ins
-function showCheckinToast(): void {
-  const h = new Date().getHours();
-  if (h < 9 || h >= 21) return;
-  showCheckinPopup(); // upgrade toast to popup
-}
-
-function hideCheckinToast(): void {
-  dismissCheckinPopup();
 }
 
 // --- Quick complete / skip from notifications ---
@@ -435,15 +420,6 @@ function initUI(): void {
     if (btn) setEnergyTier(btn.dataset.energy as EnergyTier);
   });
 
-  // Energy check-in toast buttons
-  $id('energyCheckinToast').addEventListener('click', (e) => {
-    const btn = (e.target as HTMLElement).closest('[data-checkin]') as HTMLElement | null;
-    if (btn) setEnergyTier(btn.dataset.checkin as EnergyTier);
-  });
-  $id('checkinDismiss').addEventListener('click', () => {
-    hideCheckinToast();
-  });
-
   // Add block button
   $id('addBlockBtn').addEventListener('click', () => openModal());
 
@@ -475,15 +451,18 @@ async function onUserSignedIn(userId: string): Promise<void> {
   // Load all data while splash screen is still visible
   await state.load(userId);
 
-  // Initialize event system (IDB queue + sync loop)
+  // Initialize event system (IDB queue + sync loop). Idempotent — safe to
+  // call again on a sign-out → sign-in cycle.
   await initEvents();
-  initSyncHealthIndicator();
   emit({ type: 'app.session_started', entity_type: null, payload: {} });
 
   // Restore energy tier from last logged value
   const tier = valueToTier(state.energy);
 
   if (!uiInitialized) {
+    // initSyncHealthIndicator subscribes a listener and wires a click handler;
+    // both persist across sign-out → sign-in, so it must only run once.
+    initSyncHealthIndicator();
     initUI();
     uiInitialized = true;
   }
@@ -591,7 +570,7 @@ document.addEventListener('visibilitychange', async () => {
 // Listen for messages from service worker (notification clicks while app is open)
 navigator.serviceWorker?.addEventListener('message', (e) => {
   if (e.data?.type === 'ENERGY_CHECKIN') {
-    showCheckinToast();
+    showCheckinPopup();
   } else if (e.data?.type === 'POMO_COMPLETE') {
     switchTab('pomo');
   } else if (e.data?.type === 'DAILY_REVIEW') {

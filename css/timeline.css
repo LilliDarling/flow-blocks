@@ -1211,52 +1211,6 @@
   color: var(--text);
 }
 
-/* ── Energy check-in toast (legacy, upgraded to popup) ── */
-
-.energy-checkin-toast {
-  position: fixed;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--surface);
-  border: 1px solid var(--accent);
-  border-radius: 16px;
-  padding: 14px 20px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
-  z-index: 60;
-  max-width: 90vw;
-  animation: toast-slide-up 0.3s ease;
-}
-
-@keyframes toast-slide-up {
-  from { transform: translateX(-50%) translateY(20px); opacity: 0; }
-  to { transform: translateX(-50%) translateY(0); opacity: 1; }
-}
-
-.checkin-label {
-  font-size: 0.82rem;
-  color: var(--text-dim);
-  white-space: nowrap;
-}
-
-.checkin-buttons {
-  display: flex;
-  gap: 6px;
-}
-
-.checkin-dismiss {
-  background: none;
-  border: none;
-  color: var(--text-dim);
-  font-size: 1.1rem;
-  cursor: pointer;
-  padding: 0 4px;
-  font-family: inherit;
-}
-
 /* ── Completion time prompt ── */
 
 .completion-time-prompt {
@@ -1461,13 +1415,6 @@
 /* ── Responsive ── */
 
 @media (max-width: 768px) {
-  .energy-checkin-toast {
-    flex-wrap: wrap;
-    justify-content: center;
-    bottom: 16px;
-  }
-  .checkin-label { white-space: normal; text-align: center; width: 100%; }
-
   .pool-grid {
     grid-template-columns: 1fr;
   }

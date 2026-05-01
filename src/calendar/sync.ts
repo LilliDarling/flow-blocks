@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { $id, fmtTime, addMinutes, getTodayDate, getTodayIndex, FlowBlock, esc } from '../utils.js';
+import { $id, fmtTime, addMinutes, toMinutes, getTodayDate, getTodayIndex, FlowBlock, esc } from '../utils.js';
 import { renderTimeline } from '../timeline.js';
 import type { CalendarEvent } from './types.js';
 
@@ -14,11 +14,6 @@ interface Conflict {
   block: FlowBlock;
   blockIndex: number;
   newStart: string;
-}
-
-function toMinutes(t: string): number {
-  const [h, m] = t.split(':').map(Number);
-  return h * 60 + m;
 }
 
 function fromMinutes(mins: number): string {

@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { fmtTime, fmtDuration, normalizeDoneTime, localDateFromIso, addMinutes, getTodayIndex, getTodayDate, TYPE_LABELS, BlockStatus, ENERGY_FIT, FlowBlock, isScheduled, valueToTier, $id, esc } from './utils.js';
+import { fmtTime, fmtDuration, normalizeDoneTime, localDateFromIso, addMinutes, parseTime, getTodayIndex, getTodayDate, TYPE_LABELS, ENERGY_FIT, FlowBlock, isScheduled, valueToTier, $id, esc } from './utils.js';
 import type { BlockType, EnergyTier } from './utils.js';
 import { openModal } from './modal.js';
 import { confirmDelete } from './confirm-delete.js';
@@ -89,18 +89,41 @@ function renderCommitments(blocks: CommitmentItem[], today: string): void {
   }).join('');
 }
 
-function renderCommitmentBlock(block: FlowBlock, realIndex: number, today: string, energy: number): string {
-  const endTime = addMinutes(block.start, block.duration);
-  const menuHtml = block.menu.length > 1
-    ? block.menu.map(m => `<span>${esc(m)}</span>`).join('')
-    : '';
-  const effectiveStatus: BlockStatus = state.getEffectiveStatus(block, today);
+// SVG glyphs reused by every action row (commitment cards + pool cards).
+const EDIT_ICON = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>`;
+const DELETE_ICON = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 012-2h2a2 2 0 012 2v2"/></svg>`;
+
+/** Status + energy-fit CSS classes for a block on a given date. Both the
+ *  commitment-card and pool-card renderers need the same logic. */
+function blockClasses(block: FlowBlock, today: string, energy: number): { statusClass: string; energyClass: string } {
+  const effectiveStatus = state.getEffectiveStatus(block, today);
   const statusClass =
     effectiveStatus === 'done' ? 'completed' :
     effectiveStatus === 'skipped' ? 'skipped' : '';
   const [eMin, eMax] = ENERGY_FIT[block.type];
   const energyClass = effectiveStatus !== 'pending' ? '' :
     (energy >= eMin && energy <= eMax) ? 'energy-match' : 'energy-dim';
+  return { statusClass, energyClass };
+}
+
+/** The five action buttons shared by both card variants. The third button
+ *  flips between Pin (pool — block has no time) and Unpin (commitment —
+ *  block is scheduled). */
+function blockActionButtons(index: number, pinAction: 'pin' | 'unpin'): string {
+  const pinLabel = pinAction === 'pin' ? 'Pin' : 'Unpin';
+  return `<button class="block-action-btn done-btn" data-action="done" data-index="${index}">Did it</button>
+    <button class="block-action-btn skip-btn" data-action="skip" data-index="${index}">Not today</button>
+    <button class="block-action-btn" data-action="${pinAction}" data-index="${index}">${pinLabel}</button>
+    <button class="block-action-btn block-action-icon" data-action="edit" data-index="${index}" aria-label="Edit" title="Edit">${EDIT_ICON}</button>
+    <button class="block-action-btn block-action-icon delete-btn" data-action="delete" data-index="${index}" aria-label="Remove" title="Remove">${DELETE_ICON}</button>`;
+}
+
+function renderCommitmentBlock(block: FlowBlock, realIndex: number, today: string, energy: number): string {
+  const endTime = addMinutes(block.start, block.duration);
+  const menuHtml = block.menu.length > 1
+    ? block.menu.map(m => `<span>${esc(m)}</span>`).join('')
+    : '';
+  const { statusClass, energyClass } = blockClasses(block, today, energy);
 
   return `<div class="commitment-item">
     <div class="commitment-time">${fmtTime(block.start)}</div>
@@ -112,15 +135,7 @@ function renderCommitmentBlock(block: FlowBlock, realIndex: number, today: strin
       <div class="block-title">${esc(block.title || 'Untitled block')}</div>
       ${menuHtml ? `<div class="block-menu-items">${menuHtml}</div>` : ''}
       <div class="block-actions">
-        <button class="block-action-btn done-btn" data-action="done" data-index="${realIndex}">Did it</button>
-        <button class="block-action-btn skip-btn" data-action="skip" data-index="${realIndex}">Not today</button>
-        <button class="block-action-btn" data-action="unpin" data-index="${realIndex}">Unpin</button>
-        <button class="block-action-btn block-action-icon" data-action="edit" data-index="${realIndex}" aria-label="Edit" title="Edit">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-        </button>
-        <button class="block-action-btn block-action-icon delete-btn" data-action="delete" data-index="${realIndex}" aria-label="Remove" title="Remove">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 012-2h2a2 2 0 012 2v2"/></svg>
-        </button>
+        ${blockActionButtons(realIndex, 'unpin')}
       </div>
     </div>
   </div>`;
@@ -194,14 +209,7 @@ function renderPool(blocks: { block: FlowBlock; index: number }[], today: string
   hint.style.display = '';
 
   const renderCard = ({ block, index }: { block: FlowBlock; index: number }): string => {
-    const effectiveStatus = state.getEffectiveStatus(block, today);
-    const statusClass =
-      effectiveStatus === 'done' ? 'completed' :
-      effectiveStatus === 'skipped' ? 'skipped' : '';
-
-    const [eMin, eMax] = ENERGY_FIT[block.type];
-    const energyClass = effectiveStatus !== 'pending' ? '' :
-      (energy >= eMin && energy <= eMax) ? 'energy-match' : 'energy-dim';
+    const { statusClass, energyClass } = blockClasses(block, today, energy);
 
     const menuHtml = block.menu.length > 1
       ? `<div class="pool-card-menu">${block.menu.map(m => `<span>${esc(m)}</span>`).join('')}</div>`
@@ -217,15 +225,7 @@ function renderPool(blocks: { block: FlowBlock; index: number }[], today: string
       <div class="pool-card-title">${esc(block.title || 'Untitled')}</div>
       ${menuHtml}
       <div class="pool-card-actions">
-        <button class="block-action-btn done-btn" data-action="done" data-index="${index}">Did it</button>
-        <button class="block-action-btn skip-btn" data-action="skip" data-index="${index}">Not today</button>
-        <button class="block-action-btn" data-action="pin" data-index="${index}">Pin</button>
-        <button class="block-action-btn block-action-icon" data-action="edit" data-index="${index}" aria-label="Edit" title="Edit">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-        </button>
-        <button class="block-action-btn block-action-icon delete-btn" data-action="delete" data-index="${index}" aria-label="Remove" title="Remove">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 012-2h2a2 2 0 012 2v2"/></svg>
-        </button>
+        ${blockActionButtons(index, 'pin')}
       </div>
     </div>`;
   };
@@ -349,9 +349,9 @@ function logSomethingElse(): void {
 
   container.querySelector('.completion-earlier-btn')!.addEventListener('click', () => {
     const timeInput = container.querySelector('.completion-time-input') as HTMLInputElement;
-    const [h, m] = timeInput.value.split(':').map(Number);
+    const { hours, minutes } = parseTime(timeInput.value);
     const earlier = new Date();
-    earlier.setHours(h, m, 0, 0);
+    earlier.setHours(hours, minutes, 0, 0);
     if (earlier > now) earlier.setTime(now.getTime());
     save(earlier);
   });
@@ -472,9 +472,9 @@ function askCompletionDetails(block: FlowBlock): Promise<CompletionResult | null
 
     container.querySelector('.completion-earlier-btn')!.addEventListener('click', () => {
       const timeInput = container.querySelector('.completion-time-input') as HTMLInputElement;
-      const [h, m] = timeInput.value.split(':').map(Number);
+      const { hours, minutes } = parseTime(timeInput.value);
       const earlier = new Date();
-      earlier.setHours(h, m, 0, 0);
+      earlier.setHours(hours, minutes, 0, 0);
       if (earlier > now) earlier.setTime(now.getTime());
       const items = getSelectedItems();
       const durationMinutes = getDurationMinutes();
