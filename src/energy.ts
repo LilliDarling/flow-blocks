@@ -36,6 +36,27 @@ function fmtHour(h: number): string {
   return `${h12}${ampm}`;
 }
 
+function fmtHourRanges(hours: number[]): string {
+  if (hours.length === 0) return '';
+  const sorted = [...hours].sort((a, b) => a - b);
+  const groups: Array<[number, number]> = [];
+  let start = sorted[0];
+  let prev = sorted[0];
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i] === prev + 1) {
+      prev = sorted[i];
+    } else {
+      groups.push([start, prev]);
+      start = sorted[i];
+      prev = sorted[i];
+    }
+  }
+  groups.push([start, prev]);
+  return groups
+    .map(([a, b]) => a === b ? `<strong>${fmtHour(a)}</strong>` : `<strong>${fmtHour(a)}-${fmtHour(b)}</strong>`)
+    .join(', ');
+}
+
 function barColor(tier: EnergyTier): string {
   if (tier === 'low') return 'var(--danger)';
   if (tier === 'med') return 'var(--steady)';
@@ -83,11 +104,11 @@ export function renderEnergyAnalytics(): void {
 
   const insightItems: string[] = [];
   if (peakBuckets.length > 0) {
-    const times = peakBuckets.map(b => `<strong>${fmtHour(b.hour)}</strong>`).join(', ');
+    const times = fmtHourRanges(peakBuckets.map(b => b.hour));
     insightItems.push(`You tend to feel high energy around ${times} — great time for push or flow blocks.`);
   }
   if (lowBuckets.length > 0) {
-    const times = lowBuckets.map(b => `<strong>${fmtHour(b.hour)}</strong>`).join(', ');
+    const times = fmtHourRanges(lowBuckets.map(b => b.hour));
     insightItems.push(`Energy dips around ${times} — good slot for drift or rest.`);
   }
   insightItems.push(`Most common energy level: <strong>${TIER_LABELS[overallTier]}</strong> across ${logs.length} check-ins.`);

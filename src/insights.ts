@@ -19,6 +19,9 @@ export interface Insight {
   evidenceCount: number;
   weight: number;
   contextual: boolean;
+  // Explicit knowledge-graph edges. Used when one insight summarises
+  // multiple underlying pairs (e.g. consolidated dow-skip patterns).
+  edges?: Array<[string, string]>;
 }
 
 interface EventRow {
@@ -200,27 +203,65 @@ function detectDowSkipPatterns(events: EventRow[]): Insight[] {
     totalsByType.set(blockType, (totalsByType.get(blockType) || 0) + 1);
   }
 
-  const insights: Insight[] = [];
-
+  // Collect every (block, day) pair that exceeds the skip threshold.
+  type Pair = { blockType: string; dow: number; count: number; weight: number };
+  const pairs: Pair[] = [];
   for (const [blockType, dowMap] of skipsByTypeDow) {
     const total = totalsByType.get(blockType) || 0;
     if (total < MIN_EVIDENCE) continue;
-
     const avgPerDay = total / 7;
-
     for (const [dow, count] of dowMap) {
-      // Surface if this day has >= 50% more skips than average
       if (count >= MIN_EVIDENCE && count >= avgPerDay * 1.5) {
-        insights.push({
-          id: `dow_skip:${blockType}:${dow}`,
-          category: 'dow_skip_pattern',
-          message: `You tend to skip ${blockType} blocks on ${DOW_NAMES[dow]}. Worth adjusting your schedule?`,
-          evidenceCount: count,
-          weight: count / total,
-          contextual: false,
-        });
+        pairs.push({ blockType, dow, count, weight: count / total });
       }
     }
+  }
+
+  if (pairs.length === 0) return [];
+
+  // Pivot to dow → blocks-skipped-that-day, accumulating evidence.
+  const byDow = new Map<number, { blocks: Set<string>; evidence: number; weight: number }>();
+  for (const p of pairs) {
+    if (!byDow.has(p.dow)) byDow.set(p.dow, { blocks: new Set(), evidence: 0, weight: 0 });
+    const d = byDow.get(p.dow)!;
+    d.blocks.add(p.blockType);
+    d.evidence += p.count;
+    d.weight += p.weight;
+  }
+
+  // Merge days that share the same block set into one card.
+  type Group = { blocks: string[]; days: number[]; evidence: number; weight: number };
+  const groups = new Map<string, Group>();
+  for (const [dow, d] of byDow) {
+    const blocks = [...d.blocks].sort();
+    const key = blocks.join(',');
+    if (!groups.has(key)) groups.set(key, { blocks, days: [], evidence: 0, weight: 0 });
+    const g = groups.get(key)!;
+    g.days.push(dow);
+    g.evidence += d.evidence;
+    g.weight += d.weight;
+  }
+
+  const insights: Insight[] = [];
+  for (const g of groups.values()) {
+    g.days.sort((a, b) => a - b);
+    const blockList = formatList(g.blocks);
+    const dayList = formatList(g.days.map(d => DOW_NAMES[d]));
+    const edges: Array<[string, string]> = [];
+    for (const dow of g.days) {
+      for (const block of g.blocks) {
+        edges.push([`dow:${dow}`, `skip:${block}`]);
+      }
+    }
+    insights.push({
+      id: `dow_skip:${g.blocks.join(',')}:${g.days.join(',')}`,
+      category: 'dow_skip_pattern',
+      message: `You tend to skip ${blockList} blocks on ${dayList}. Worth adjusting your schedule?`,
+      evidenceCount: g.evidence,
+      weight: Math.min(g.weight, 1),
+      contextual: false,
+      edges,
+    });
   }
 
   return insights;
@@ -287,9 +328,14 @@ async function writeKnowledgeEdges(insights: Insight[]): Promise<void> {
 
   const rows = insights
     .filter(i => !i.contextual && i.evidenceCount >= MIN_EVIDENCE)
-    .map(i => {
-      const [source, target] = edgeFromInsight(i);
-      return { source, target, weight: i.weight, evidence_count: i.evidenceCount };
+    .flatMap(i => {
+      const pairs = i.edges && i.edges.length > 0 ? i.edges : [edgeFromInsight(i)];
+      return pairs.map(([source, target]) => ({
+        source,
+        target,
+        weight: i.weight,
+        evidence_count: i.evidenceCount,
+      }));
     })
     .filter(r => VALID_NODE.test(r.source) && VALID_NODE.test(r.target))
     .map(r => ({
@@ -412,4 +458,11 @@ export function initInsightEvents(): void {
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function formatList(items: string[]): string {
+  if (items.length === 0) return '';
+  if (items.length === 1) return items[0];
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
 }
