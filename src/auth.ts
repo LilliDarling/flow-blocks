@@ -259,6 +259,61 @@ async function handleResendConfirmation(): Promise<void> {
   }
 }
 
+// --- Profile modal ---
+
+function showProfileModal(): void {
+  const modal = $id('profileModal');
+  const emailEl = $id('profileEmail');
+  const feedback = $id('profileFeedback');
+
+  feedback.textContent = '';
+  feedback.style.display = 'none';
+
+  supabase.auth.getUser().then(({ data: { user } }) => {
+    emailEl.textContent = user?.email ?? '—';
+  });
+
+  modal.classList.add('open');
+}
+
+function hideProfileModal(): void {
+  $id('profileModal').classList.remove('open');
+}
+
+function showProfileFeedback(msg: string, kind: 'success' | 'error'): void {
+  const el = $id('profileFeedback');
+  el.textContent = msg;
+  el.style.display = 'block';
+  el.dataset.kind = kind;
+}
+
+async function handleProfileResetPassword(): Promise<void> {
+  const btn = $id('profileResetBtn') as HTMLButtonElement;
+  const { data: { user } } = await supabase.auth.getUser();
+  const email = user?.email;
+
+  if (!email) {
+    showProfileFeedback("We couldn't find an email on your account.", 'error');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/`,
+  });
+
+  btn.disabled = false;
+  btn.textContent = 'Send reset link';
+
+  if (error) {
+    showProfileFeedback(error.message, 'error');
+  } else {
+    showProfileFeedback(`Reset link sent to ${email}. Check your inbox.`, 'success');
+  }
+}
+
 async function handleSignOut(): Promise<void> {
   await supabase.auth.signOut();
   // Hard reload clears all in-memory state, sessionStorage, and stops event sync.
@@ -278,6 +333,14 @@ export function initAuth(): void {
   $id('authForgot').addEventListener('click', handleForgotPassword);
   $id('authResend').addEventListener('click', handleResendConfirmation);
   $id('signOutBtn').addEventListener('click', handleSignOut);
+
+  // Profile modal wiring
+  $id('profileBtn').addEventListener('click', showProfileModal);
+  $id('profileCloseBtn').addEventListener('click', hideProfileModal);
+  $id('profileResetBtn').addEventListener('click', handleProfileResetPassword);
+  $id('profileModal').addEventListener('click', (e) => {
+    if ((e.target as HTMLElement).id === 'profileModal') hideProfileModal();
+  });
 
   // Password recovery modal wiring
   $id('passwordRecoverySave').addEventListener('click', handlePasswordRecoverySave);
