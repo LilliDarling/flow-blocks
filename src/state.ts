@@ -317,6 +317,10 @@ class AppState {
     const existing = this.blocks[index];
     if (!existing?.id) return false;
     const today = getTodayDate();
+    // Backdated completions land on the day they were actually done.
+    const completionDate = completedAt
+      ? `${completedAt.getFullYear()}-${String(completedAt.getMonth() + 1).padStart(2, '0')}-${String(completedAt.getDate()).padStart(2, '0')}`
+      : today;
 
     if (existing.date || existing.days.length === 0) {
       // One-off block (dated or unscheduled pool item): update the block row directly
@@ -328,10 +332,10 @@ class AppState {
       }
       this.blocks[index].status = status;
     } else {
-      // Recurring block: upsert into block_completions for today
+      // Recurring block: upsert into block_completions for the chosen date
       const row: Record<string, unknown> = {
         block_id: existing.id,
-        completion_date: today,
+        completion_date: completionDate,
         status,
       };
       if (completedAt) row.completed_at = completedAt.toISOString();
@@ -343,11 +347,11 @@ class AppState {
         this.showSaveBanner({ error: true });
         return false;
       }
-      this.completions.set(`${existing.id}_${today}`, status);
+      this.completions.set(`${existing.id}_${completionDate}`, status);
     }
 
     // Emit status event
-    const date = existing.date || today;
+    const date = existing.date || completionDate;
 
     if (status === 'done') {
       emit({
@@ -581,6 +585,8 @@ class AppState {
       : undefined;
     const insertRow: Record<string, unknown> = { user_id: this.userId, text: safeText, time };
     if (safeDuration) insertRow.duration_minutes = safeDuration;
+    // For backdated completions, set created_at so the week recap groups it under the right day.
+    if (completedAt) insertRow.created_at = at.toISOString();
     const { data } = await supabase
       .from('done_items')
       .insert(insertRow)

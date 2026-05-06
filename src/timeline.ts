@@ -313,6 +313,7 @@ function logSomethingElse(): void {
   const now = new Date();
   const nowH = now.getHours().toString().padStart(2, '0');
   const nowM = now.getMinutes().toString().padStart(2, '0');
+  const todayDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
   const container = document.createElement('div');
   container.className = 'completion-time-prompt';
@@ -324,7 +325,8 @@ function logSomethingElse(): void {
       <div class="completion-time-options">
         <button class="btn btn-primary completion-now-btn">Just now</button>
         <div class="completion-earlier">
-          <label>At:</label>
+          <label>On:</label>
+          <input type="date" class="completion-date-input" value="${todayDate}" max="${todayDate}">
           <input type="time" class="completion-time-input" value="${nowH}:${nowM}">
           <button class="btn btn-ghost completion-earlier-btn">Set</button>
         </div>
@@ -348,10 +350,11 @@ function logSomethingElse(): void {
   container.querySelector('.completion-now-btn')!.addEventListener('click', () => save(null));
 
   container.querySelector('.completion-earlier-btn')!.addEventListener('click', () => {
+    const dateInput = container.querySelector('.completion-date-input') as HTMLInputElement;
     const timeInput = container.querySelector('.completion-time-input') as HTMLInputElement;
     const { hours, minutes } = parseTime(timeInput.value);
-    const earlier = new Date();
-    earlier.setHours(hours, minutes, 0, 0);
+    const [yy, mm, dd] = (dateInput.value || todayDate).split('-').map(Number);
+    const earlier = new Date(yy, mm - 1, dd, hours, minutes, 0, 0);
     if (earlier > now) earlier.setTime(now.getTime());
     save(earlier);
   });
@@ -394,6 +397,7 @@ function askCompletionDetails(block: FlowBlock): Promise<CompletionResult | null
 
     const nowH = now.getHours().toString().padStart(2, '0');
     const nowM = now.getMinutes().toString().padStart(2, '0');
+    const todayDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
     const menuHtml = block.menu.length > 0
       ? `<div class="completion-menu-items">
@@ -423,7 +427,8 @@ function askCompletionDetails(block: FlowBlock): Promise<CompletionResult | null
         <div class="completion-time-options">
           <button class="btn btn-primary completion-now-btn">Just now</button>
           <div class="completion-earlier">
-            <label>Earlier at:</label>
+            <label>Earlier on:</label>
+            <input type="date" class="completion-date-input" value="${todayDate}" max="${todayDate}">
             <input type="time" class="completion-time-input" value="${nowH}:${nowM}">
             <button class="btn btn-ghost completion-earlier-btn">Set</button>
           </div>
@@ -471,10 +476,11 @@ function askCompletionDetails(block: FlowBlock): Promise<CompletionResult | null
     });
 
     container.querySelector('.completion-earlier-btn')!.addEventListener('click', () => {
+      const dateInput = container.querySelector('.completion-date-input') as HTMLInputElement;
       const timeInput = container.querySelector('.completion-time-input') as HTMLInputElement;
       const { hours, minutes } = parseTime(timeInput.value);
-      const earlier = new Date();
-      earlier.setHours(hours, minutes, 0, 0);
+      const [yy, mm, dd] = (dateInput.value || todayDate).split('-').map(Number);
+      const earlier = new Date(yy, mm - 1, dd, hours, minutes, 0, 0);
       if (earlier > now) earlier.setTime(now.getTime());
       const items = getSelectedItems();
       const durationMinutes = getDurationMinutes();
