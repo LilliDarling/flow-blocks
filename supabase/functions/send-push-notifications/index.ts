@@ -565,12 +565,13 @@ async function handlePoolNudge(ctx: Ctx, completions: Map<string, string>): Prom
     const diff = (POOL_NUDGE_HOUR * 60) - nowMinutes;
     if (diff < -2 || diff > 2) continue;
 
-    // Count pool items (no start_time, not completed)
+    // Count pool items (no start_time, not completed/skipped/dismissed).
+    // Pool items are stored with block_date = null and days = [], so their
+    // status lives on the block row itself — match countActivePool in state.ts.
     const poolItems = ctx.blocks.filter((b: BlockRow) => {
       if (b.user_id !== userId) return false;
       if (b.start_time) return false; // scheduled, not pool
-      if (b.block_date && b.status === 'done') return false;
-      if (b.block_date && b.status === 'skipped') return false;
+      if (b.status === 'done' || b.status === 'skipped' || b.status === 'dismissed') return false;
       return true;
     });
     if (poolItems.length === 0) continue;

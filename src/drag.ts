@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { $id, fmtTime, isScheduled, getTodayDate, getTodayIndex } from './utils.js';
+import { $id, fmtTime, isScheduled, getTodayDate, getTodayIndex, toMinutes } from './utils.js';
 import { renderTimeline } from './timeline.js';
 
 const LONG_PRESS_MS = 400;
@@ -19,11 +19,6 @@ let ghostInitialTop = 0;
 let originalStartTime = '';
 let pxPerMinute = 1.5;
 let currentNewTime = '';
-
-function toMinutes(t: string): number {
-  const [h, m] = t.split(':').map(Number);
-  return h * 60 + m;
-}
 
 function fromMinutes(mins: number): string {
   const clamped = Math.max(0, Math.min(23 * 60 + 45, mins));

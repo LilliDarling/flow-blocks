@@ -112,6 +112,11 @@ self.addEventListener('notificationclick', (e) => {
 // --- Fetch ---
 
 self.addEventListener('fetch', (e) => {
+  // Cache API only accepts GET — cache.put() and caches.match() both reject
+  // non-GET. Bail early so POST/PUT/DELETE/HEAD/OPTIONS pass through to the
+  // network without the cache machinery throwing.
+  if (e.request.method !== 'GET') return;
+
   const url = new URL(e.request.url);
 
   // Always go to network for API calls and OAuth

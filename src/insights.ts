@@ -1,6 +1,6 @@
 import { supabase } from './supabase.js';
 import { state } from './state.js';
-import { $id, valueToTier, EnergyTier, esc } from './utils.js';
+import { $id, valueToTier, EnergyTier, esc, localDateFromIso } from './utils.js';
 
 // ────────────────────────────────────────────────────────────
 // Types
@@ -19,6 +19,9 @@ export interface Insight {
   evidenceCount: number;
   weight: number;
   contextual: boolean;
+  // Explicit knowledge-graph edges. Used when one insight summarises
+  // multiple underlying pairs (e.g. consolidated dow-skip patterns).
+  edges?: Array<[string, string]>;
 }
 
 interface EventRow {
@@ -95,18 +98,22 @@ export function invalidateInsightCache(): void {
 // ────────────────────────────────────────────────────────────
 
 function detectCompletionStreak(events: EventRow[]): Insight[] {
+  // Bucket completions by the user's LOCAL date. occurred_at is UTC, so a
+  // block completed at 11pm local in a UTC- timezone would land on the next
+  // UTC day and break the streak. localDateFromIso uses the device's TZ to
+  // match `getTodayDate()`.
   const completionDates = new Set<string>();
   for (const e of events) {
     if (e.type === 'block.completed') {
-      completionDates.add(e.occurred_at.slice(0, 10));
+      completionDates.add(localDateFromIso(e.occurred_at));
     }
   }
 
-  // Count consecutive days backwards from today
+  // Count consecutive days backwards from today (local).
   let streak = 0;
   const d = new Date();
   while (true) {
-    const dateStr = d.toISOString().slice(0, 10);
+    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     if (completionDates.has(dateStr)) {
       streak++;
       d.setDate(d.getDate() - 1);
@@ -196,27 +203,65 @@ function detectDowSkipPatterns(events: EventRow[]): Insight[] {
     totalsByType.set(blockType, (totalsByType.get(blockType) || 0) + 1);
   }
 
-  const insights: Insight[] = [];
-
+  // Collect every (block, day) pair that exceeds the skip threshold.
+  type Pair = { blockType: string; dow: number; count: number; weight: number };
+  const pairs: Pair[] = [];
   for (const [blockType, dowMap] of skipsByTypeDow) {
     const total = totalsByType.get(blockType) || 0;
     if (total < MIN_EVIDENCE) continue;
-
     const avgPerDay = total / 7;
-
     for (const [dow, count] of dowMap) {
-      // Surface if this day has >= 50% more skips than average
       if (count >= MIN_EVIDENCE && count >= avgPerDay * 1.5) {
-        insights.push({
-          id: `dow_skip:${blockType}:${dow}`,
-          category: 'dow_skip_pattern',
-          message: `You tend to skip ${blockType} blocks on ${DOW_NAMES[dow]}. Worth adjusting your schedule?`,
-          evidenceCount: count,
-          weight: count / total,
-          contextual: false,
-        });
+        pairs.push({ blockType, dow, count, weight: count / total });
       }
     }
+  }
+
+  if (pairs.length === 0) return [];
+
+  // Pivot to dow → blocks-skipped-that-day, accumulating evidence.
+  const byDow = new Map<number, { blocks: Set<string>; evidence: number; weight: number }>();
+  for (const p of pairs) {
+    if (!byDow.has(p.dow)) byDow.set(p.dow, { blocks: new Set(), evidence: 0, weight: 0 });
+    const d = byDow.get(p.dow)!;
+    d.blocks.add(p.blockType);
+    d.evidence += p.count;
+    d.weight += p.weight;
+  }
+
+  // Merge days that share the same block set into one card.
+  type Group = { blocks: string[]; days: number[]; evidence: number; weight: number };
+  const groups = new Map<string, Group>();
+  for (const [dow, d] of byDow) {
+    const blocks = [...d.blocks].sort();
+    const key = blocks.join(',');
+    if (!groups.has(key)) groups.set(key, { blocks, days: [], evidence: 0, weight: 0 });
+    const g = groups.get(key)!;
+    g.days.push(dow);
+    g.evidence += d.evidence;
+    g.weight += d.weight;
+  }
+
+  const insights: Insight[] = [];
+  for (const g of groups.values()) {
+    g.days.sort((a, b) => a - b);
+    const blockList = formatList(g.blocks);
+    const dayList = formatList(g.days.map(d => DOW_NAMES[d]));
+    const edges: Array<[string, string]> = [];
+    for (const dow of g.days) {
+      for (const block of g.blocks) {
+        edges.push([`dow:${dow}`, `skip:${block}`]);
+      }
+    }
+    insights.push({
+      id: `dow_skip:${g.blocks.join(',')}:${g.days.join(',')}`,
+      category: 'dow_skip_pattern',
+      message: `You tend to skip ${blockList} blocks on ${dayList}. Worth adjusting your schedule?`,
+      evidenceCount: g.evidence,
+      weight: Math.min(g.weight, 1),
+      contextual: false,
+      edges,
+    });
   }
 
   return insights;
@@ -283,9 +328,14 @@ async function writeKnowledgeEdges(insights: Insight[]): Promise<void> {
 
   const rows = insights
     .filter(i => !i.contextual && i.evidenceCount >= MIN_EVIDENCE)
-    .map(i => {
-      const [source, target] = edgeFromInsight(i);
-      return { source, target, weight: i.weight, evidence_count: i.evidenceCount };
+    .flatMap(i => {
+      const pairs = i.edges && i.edges.length > 0 ? i.edges : [edgeFromInsight(i)];
+      return pairs.map(([source, target]) => ({
+        source,
+        target,
+        weight: i.weight,
+        evidence_count: i.evidenceCount,
+      }));
     })
     .filter(r => VALID_NODE.test(r.source) && VALID_NODE.test(r.target))
     .map(r => ({
@@ -313,7 +363,10 @@ function edgeFromInsight(insight: Insight): [string, string] {
   const parts = insight.id.split(':');
   switch (insight.category) {
     case 'completion_streak':
-      return ['streak:current', `days:${parts[1]}`];
+      // id is the literal 'streak:current' — the count is on evidenceCount,
+      // not in the id. Parsing parts[1] previously ground out to the string
+      // "current", collapsing every streak length onto a single graph node.
+      return ['streak:current', `days:${insight.evidenceCount}`];
     case 'energy_block_correlation':
       return [`energy:${parts[2]}`, `complete:${parts[1]}`];
     case 'dow_skip_pattern':
@@ -405,4 +458,11 @@ export function initInsightEvents(): void {
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function formatList(items: string[]): string {
+  if (items.length === 0) return '';
+  if (items.length === 1) return items[0];
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
 }

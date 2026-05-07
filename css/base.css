@@ -6,6 +6,12 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* Guard against horizontal overflow widening the layout viewport on mobile.
+ * Without this, a single misbehaving child (wide flex row, long unbroken
+ * string, etc.) makes Android Chrome compute a desktop-width viewport and
+ * scale the whole page down, so everything renders tiny. */
+html, body { overflow-x: hidden; }
+
 :root {
   /* ── Botanical palette — harmonized oklch, chroma ~0.06–0.14 ── */
   --push:    oklch(0.74 0.12 70);    /* morning amber */

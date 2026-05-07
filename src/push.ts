@@ -66,6 +66,29 @@ async function subscribeToPushWeb(userId: string): Promise<void> {
   }
 }
 
+/** Tear down this browser's push subscription and remove its server row, so a
+ * different user signing in later doesn't keep receiving the previous user's
+ * reminders. Must run before supabase.auth.signOut() — once the session is
+ * gone, the DELETE will be rejected by RLS. */
+export async function unsubscribeFromPush(userId: string): Promise<void> {
+  try {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    const reg = await navigator.serviceWorker.ready;
+    const subscription = await reg.pushManager.getSubscription();
+    if (!subscription) return;
+
+    await supabase
+      .from('push_subscriptions')
+      .delete()
+      .eq('user_id', userId)
+      .eq('endpoint', subscription.endpoint);
+
+    await subscription.unsubscribe();
+  } catch (err) {
+    console.warn('[push] unsubscribe failed:', err);
+  }
+}
+
 // --- Native Push (FCM / APNs via Capacitor) ---
 
 async function subscribeToPushNative(userId: string): Promise<void> {

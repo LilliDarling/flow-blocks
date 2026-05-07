@@ -38,4 +38,11 @@ export default defineConfig({
   // so OAuth callback URLs like /auth/google/callback are handled client-side
   appType: 'spa',
   plugins: [tailwindcss(), swVersionPlugin()],
+  build: {
+    // Explicit (matches Vite default) — keeps source maps OUT of production
+    // bundles so business logic, variable names, and comments aren't shipped
+    // to end users. If Sentry/error-tracking is ever wired up, switch to
+    // 'hidden' so maps are generated for upload but not referenced from JS.
+    sourcemap: false,
+  },
 });

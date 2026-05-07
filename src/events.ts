@@ -1,6 +1,6 @@
 import { supabase } from './supabase.js';
 import { state } from './state.js';
-import { BlockType, EnergyTier } from './utils.js';
+import { BlockType, EnergyTier, getTodayDate, getDateOffsetFromToday } from './utils.js';
 
 // ────────────────────────────────────────────────────────────
 // Event Types
@@ -523,18 +523,22 @@ export function diff(before: Record<string, unknown>, after: Record<string, unkn
 const SWEEP_KEY = 'wildbloom-last-sweep';
 
 /** Emit block.expired for yesterday's blocks that had no interaction.
- *  Runs once per calendar day, on first app open. */
+ *  Runs once per calendar day, on first app open. All dates are in the user's
+ *  local timezone — `b.date` and `completion_date` are stored as local
+ *  YYYY-MM-DD, so "yesterday" means yesterday-in-local-time. Using UTC here
+ *  causes false expirations during evening hours in negative-UTC timezones. */
 async function sweepExpiredBlocks(): Promise<void> {
-  const today = new Date();
-  const todayStr = today.toISOString().slice(0, 10);
+  const todayStr = getTodayDate();
 
-  // Only run once per day
+  // Only run once per local calendar day
   if (localStorage.getItem(SWEEP_KEY) === todayStr) return;
 
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().slice(0, 10);
-  const yesterdayDayIdx = yesterday.getDay() === 0 ? 6 : yesterday.getDay() - 1; // Mon=0
+  const yesterdayStr = getDateOffsetFromToday(1);
+
+  // Mon=0 day-of-week index for yesterday (matches block.days convention).
+  const yesterdayLocal = new Date();
+  yesterdayLocal.setDate(yesterdayLocal.getDate() - 1);
+  const yesterdayDayIdx = yesterdayLocal.getDay() === 0 ? 6 : yesterdayLocal.getDay() - 1;
 
   // Find blocks that were scheduled for yesterday
   const scheduledBlocks = state.blocks.filter(b => {
@@ -570,8 +574,9 @@ async function sweepExpiredBlocks(): Promise<void> {
     }
   }
 
-  // Emit block.expired for blocks with no interaction
-  const midnight = new Date(yesterday);
+  // Emit block.expired for blocks with no interaction.
+  // expiredAt = end of local-yesterday → ISO (UTC) for the timestamptz column.
+  const midnight = new Date(yesterdayLocal);
   midnight.setHours(23, 59, 59, 0);
   const expiredAt = midnight.toISOString();
 

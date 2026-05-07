@@ -88,12 +88,12 @@
     <div class="auth-error" id="authError"></div>
     <div class="form-group">
       <label>Email</label>
-      <input type="email" id="authEmail" placeholder="you@example.com">
+      <input type="email" id="authEmail" placeholder="you@example.com" autocomplete="email">
     </div>
     <div class="form-group" id="authPasswordGroup">
       <label>Password</label>
       <div class="password-field">
-        <input type="password" id="authPassword" placeholder="••••••••">
+        <input type="password" id="authPassword" placeholder="••••••••" autocomplete="current-password">
         <button type="button" class="password-toggle" id="authPasswordToggle" tabindex="-1" aria-label="Show password">
           <svg class="eye-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
@@ -114,10 +114,20 @@
       <button class="btn btn-primary" id="authSignIn">Sign In</button>
     </div>
     <div class="auth-divider"><span>or</span></div>
+    <button class="btn auth-magic-btn" id="authMagic">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+        <polyline points="22,6 12,13 2,6"/>
+      </svg>
+      Email me a sign-in link
+    </button>
     <button class="btn auth-google-btn" id="authGoogle">
       <svg viewBox="0 0 24 24" width="18" height="18"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
       Continue with Google
     </button>
+    <div class="auth-resend">
+      <button type="button" class="auth-link" id="authResend">Didn't get the confirmation email? Resend</button>
+    </div>
     <div class="auth-legal">
       By signing in you agree to our <a href="#" class="legal-link" data-legal="privacy">Privacy Policy</a> and <a href="#" class="legal-link" data-legal="tos">Terms of Service</a>
     </div>
@@ -145,6 +155,12 @@
         <line x1="16" y1="2" x2="16" y2="6"/>
         <line x1="8" y1="2" x2="8" y2="6"/>
         <line x1="3" y1="10" x2="21" y2="10"/>
+      </svg>
+    </button>
+    <button class="header-btn" id="profileBtn" aria-label="Profile">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+        <circle cx="12" cy="7" r="4"/>
       </svg>
     </button>
     <button class="sign-out-btn" id="signOutBtn" aria-label="Sign out">
@@ -566,6 +582,68 @@
   </div>
 </div>
 
+<!-- PASSWORD RECOVERY MODAL — shown when the user arrives via the reset email link -->
+<div class="modal-overlay" id="passwordRecoveryModal">
+  <div class="modal">
+    <h2>Set a new password</h2>
+    <p class="modal-subtitle">You followed a reset link, so let's lock in a new password before you continue.</p>
+    <div class="auth-error" id="passwordRecoveryError" style="display:none"></div>
+    <div class="form-group">
+      <label>New password</label>
+      <div class="password-field">
+        <input type="password" id="passwordRecoveryInput" placeholder="At least 6 characters" autocomplete="new-password">
+        <button type="button" class="password-toggle" id="passwordRecoveryToggle" tabindex="-1" aria-label="Show password">
+          <svg class="eye-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+          <svg class="eye-off-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+            <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
+            <line x1="1" y1="1" x2="23" y2="23"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div class="modal-buttons">
+      <button class="btn btn-ghost" id="passwordRecoveryCancel">Skip for now</button>
+      <button class="btn btn-primary" id="passwordRecoverySave">Save password</button>
+    </div>
+  </div>
+</div>
+
+<!-- PROFILE MODAL -->
+<div class="modal-overlay" id="profileModal">
+  <div class="modal profile-modal">
+    <h2>Your account</h2>
+
+    <div class="profile-section">
+      <div class="profile-label">Signed in as</div>
+      <div class="profile-email" id="profileEmail"></div>
+    </div>
+
+    <div class="profile-feedback" id="profileFeedback" style="display:none"></div>
+
+    <div class="profile-section">
+      <div class="profile-section-heading">Reset your password</div>
+      <p class="profile-section-desc">We'll email you a link to set a new password. The link works for one hour.</p>
+      <button class="btn btn-primary profile-action-btn" id="profileResetBtn">Send reset link</button>
+    </div>
+
+    <div class="profile-section profile-section-danger">
+      <div class="profile-section-heading">Delete your account</div>
+      <p class="profile-section-desc">Account deletion is handled by hand for now so we can make sure your data is fully cleared. Email us from your account address and we'll take care of it.</p>
+      <div class="profile-copy-row">
+        <code class="profile-copy-value" id="profileDeleteEmail">lillith@valkyrieremedy.com</code>
+        <button class="btn btn-ghost profile-copy-btn" id="profileDeleteCopyBtn" type="button">Copy</button>
+      </div>
+    </div>
+
+    <div class="modal-buttons">
+      <button class="btn btn-ghost" id="profileCloseBtn">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- REMINDER MODAL -->
 <div class="modal-overlay reminder-modal" id="reminderModal">
   <div class="modal">
@@ -592,17 +670,6 @@
       <button class="btn btn-primary" id="reminderSaveBtn">Save</button>
     </div>
   </div>
-</div>
-
-<!-- Energy check-in toast -->
-<div class="energy-checkin-toast" id="energyCheckinToast" style="display:none">
-  <span class="checkin-label">Welcome back — how's your energy?</span>
-  <div class="checkin-buttons">
-    <button class="energy-btn energy-low" data-checkin="low">Low</button>
-    <button class="energy-btn energy-med" data-checkin="med">Med</button>
-    <button class="energy-btn energy-high" data-checkin="high">High</button>
-  </div>
-  <button class="checkin-dismiss" id="checkinDismiss">&times;</button>
 </div>
 
 <div class="save-banner" id="saveBanner">Changes saved</div>

@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { DAYS, TYPE_LABELS, BlockStatus, getTodayIndex, getDateForDayIndex, FlowBlock, isScheduled, fmtTime, fmtDuration, normalizeDoneTime, localDateFromIso, $id, esc } from './utils.js';
+import { DAYS, TYPE_LABELS, BlockStatus, getTodayIndex, getDateForDayIndex, FlowBlock, isScheduled, fmtTime, fmtDuration, normalizeDoneTime, localDateFromIso, toMinutes, $id, esc } from './utils.js';
 import type { DoneItem } from './utils.js';
 import { openModal, openModalForSlot } from './modal.js';
 import type { CalendarEvent } from './calendar/types.js';
@@ -83,8 +83,7 @@ export function renderWeek(): void {
       // Completed blocks are rendered from done_items at their actual completion
       // time instead — avoids duplication and respects user's logged timestamp.
       if (status === 'done') return;
-      const [bh, bm] = b.start.split(':').map(Number);
-      const startMin = bh * 60 + (bm || 0);
+      const startMin = toMinutes(b.start);
       const endMin = startMin + b.duration;
       items.push({ startMin, endMin, block: b, blockIdx: idx, status });
     });
@@ -92,8 +91,7 @@ export function renderWeek(): void {
     const dayEvents = state.weekCalendarEvents.get(date) || [];
     dayEvents.forEach((e, eIdx) => {
       if (e.allDay) return;
-      const [eh, em] = e.start.split(':').map(Number);
-      const startMin = eh * 60 + (em || 0);
+      const startMin = toMinutes(e.start);
       const endMin = startMin + e.duration;
       items.push({ startMin, endMin, calEvent: e, calColorIdx: eIdx % 8 });
     });
@@ -108,8 +106,7 @@ export function renderWeek(): void {
     state.doneItems.forEach(d => {
       if (localDateFromIso(d.created_at) !== date) return;
       const t = normalizeDoneTime(d.time);
-      const [dh, dm] = t.split(':').map(Number);
-      let endMin = dh * 60 + (dm || 0);
+      let endMin = toMinutes(t);
       const durMin = d.duration_minutes && d.duration_minutes > 0 ? d.duration_minutes : DONE_FALLBACK_MIN;
       let startMin = endMin - durMin;
 

@@ -175,6 +175,38 @@
 
 .auth-google-btn svg { flex-shrink: 0; }
 
+/* Magic-link sign-in button — sits with Google as a passwordless option */
+.auth-magic-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 18px;
+  background: var(--bg-sunk);
+  color: var(--ink);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  margin-bottom: 8px;
+  transition: all 0.18s var(--ease-soft);
+}
+
+.auth-magic-btn:hover {
+  border-color: var(--ink-3);
+  background: var(--surface-hover);
+}
+
+.auth-magic-btn svg { flex-shrink: 0; color: var(--ink-2); }
+
+.auth-resend {
+  margin-top: var(--sp-3);
+  text-align: center;
+}
+
 /* Legal notice on auth screen */
 .auth-legal {
   margin-top: var(--sp-3);

@@ -18,13 +18,16 @@ export async function loadConnections(userId: string): Promise<CalendarConnectio
   return (data || []) as CalendarConnection[];
 }
 
-/** Exchange OAuth code for tokens via edge function.
- *  Client secret stays server-side — never bundled into the client.
+/** Handle the OAuth callback. The edge function exchanges the code, fetches
+ *  account info, and upserts the connection server-side using the verified
+ *  caller's user.id — refresh_token never crosses the wire to the client.
+ *  The userId param is kept for API compatibility but not trusted server-side.
  */
-async function exchangeCodeForTokens(
+export async function handleOAuthCallback(
   provider: string,
-  code: string
-): Promise<{ access_token: string; refresh_token: string | null; expires_at: string | null } | null> {
+  code: string,
+  _userId: string
+): Promise<CalendarConnection | null> {
   const redirectUri = `${window.location.origin}/auth/${provider}/callback`;
 
   try {
@@ -32,102 +35,16 @@ async function exchangeCodeForTokens(
       body: { provider, code, redirect_uri: redirectUri },
     });
 
-    if (!error && data?.access_token) {
-      return {
-        access_token: data.access_token,
-        refresh_token: data.refresh_token || null,
-        expires_at: data.expires_at || null,
-      };
+    if (error || !data?.connection) {
+      console.error('Calendar: OAuth exchange failed', error);
+      return null;
     }
 
-    console.error('Calendar: Token exchange failed', error);
-    return null;
+    return data.connection as CalendarConnection;
   } catch (err) {
-    console.error('Calendar: Token exchange unavailable', err);
+    console.error('Calendar: OAuth exchange unavailable', err);
     return null;
   }
-}
-
-/** Fetch the Google account email for the given access token. */
-async function fetchGoogleEmail(accessToken: string): Promise<string | null> {
-  try {
-    const res = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.email || null;
-  } catch {
-    return null;
-  }
-}
-
-/** Fetch the list of calendar IDs for a Google account. */
-async function fetchGoogleCalendarIds(accessToken: string): Promise<string[]> {
-  try {
-    const res = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (!res.ok) return ['primary'];
-    const data = await res.json();
-    return (data.items || [])
-      .filter((cal: { accessRole: string }) => cal.accessRole === 'owner' || cal.accessRole === 'writer')
-      .map((cal: { id: string }) => cal.id);
-  } catch {
-    return ['primary'];
-  }
-}
-
-/** Handle the OAuth callback (exchange code for tokens, save connection). */
-export async function handleOAuthCallback(
-  provider: string,
-  code: string,
-  userId: string
-): Promise<CalendarConnection | null> {
-  const tokens = await exchangeCodeForTokens(provider, code);
-  if (!tokens) return null;
-
-  // Determine account identity and calendar list
-  let accountId = 'primary';
-  let displayName = provider;
-  let calendarIds = ['primary'];
-
-  if (provider === 'google') {
-    const [email, calIds] = await Promise.all([
-      fetchGoogleEmail(tokens.access_token),
-      fetchGoogleCalendarIds(tokens.access_token),
-    ]);
-    accountId = email || 'primary';
-    displayName = email ? `Google Calendar (${email})` : 'Google Calendar';
-    calendarIds = calIds.length > 0 ? calIds : ['primary'];
-  }
-
-  // Upsert connection record — keyed by (user, provider, account) so
-  // the same Google account updates in place while different accounts coexist
-  const { data: conn, error } = await supabase
-    .from('calendar_connections')
-    .upsert(
-      {
-        user_id: userId,
-        provider,
-        provider_account_id: accountId,
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
-        token_expires_at: tokens.expires_at,
-        calendar_ids: calendarIds,
-        display_name: displayName,
-      },
-      { onConflict: 'user_id,provider,provider_account_id' }
-    )
-    .select()
-    .single();
-
-  if (error) {
-    console.error('Calendar: Failed to save connection', error);
-    return null;
-  }
-
-  return (conn as CalendarConnection) || null;
 }
 
 /** Max events retained per day after merging across connected calendars. */
@@ -205,13 +122,28 @@ export async function disconnectCalendar(connectionId: string): Promise<void> {
 export async function checkOAuthRedirect(userId: string): Promise<CalendarConnection | null> {
   const url = new URL(window.location.href);
   const code = url.searchParams.get('code');
+  const state = url.searchParams.get('state');
   const pathMatch = url.pathname.match(/\/auth\/(\w+)\/callback/);
 
   if (!code || !pathMatch) return null;
 
   const provider = pathMatch[1];
-  // Clean the URL
+
+  // Verify the CSRF state issued by startAuth() matches the value Google
+  // echoed back. Mismatch = fabricated callback; drop the code unused.
+  const expectedState = sessionStorage.getItem('oauth_state');
+  const expectedProvider = sessionStorage.getItem('oauth_provider');
+  sessionStorage.removeItem('oauth_state');
+  sessionStorage.removeItem('oauth_provider');
+
+  // Clean the URL regardless — the code is single-use; never leave it sitting
+  // in history/referrers.
   window.history.replaceState({}, '', '/');
+
+  if (!state || !expectedState || state !== expectedState || provider !== expectedProvider) {
+    console.error('Calendar: OAuth state mismatch — possible CSRF, ignoring callback');
+    return null;
+  }
 
   return handleOAuthCallback(provider, code, userId);
 }

@@ -303,6 +303,21 @@ export function getTodayDate(): string {
   return `${y}-${m}-${day}`; // local "YYYY-MM-DD"
 }
 
+/** Local "YYYY-MM-DD" for `daysBack` days before today.
+ *  Use for filters against `date`-typed columns (block_date, completion_date,
+ *  skip_date, etc.) which the client writes as local YYYY-MM-DD via
+ *  `getTodayDate()`. Do NOT use `cutoff.toISOString().slice(0, 10)` for these
+ *  — that returns the UTC date and is off-by-one near midnight in non-UTC
+ *  timezones. */
+export function getDateOffsetFromToday(daysBack: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - daysBack);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 export function doneItemFromRow(row: DoneItemRow): DoneItem {
   return {
     id: row.id,
@@ -313,8 +328,30 @@ export function doneItemFromRow(row: DoneItemRow): DoneItem {
   };
 }
 
-export function fmtTime(t: string): string {
+/** Strict format check for "HH:MM" or "HH:MM:SS". The seconds segment is
+ *  accepted because Postgres `time` columns serialize as "HH:MM:SS" via
+ *  PostgREST, so reminder.time and the legacy block start_time both arrive
+ *  with a trailing ":SS" we discard. */
+const TIME_FORMAT = /^\d{1,2}:\d{2}(?::\d{2})?$/;
+
+/** Parse "HH:MM" / "HH:MM:SS" into integer parts. Returns `{ hours: NaN,
+ *  minutes: NaN }` on malformed or empty input — arithmetic on NaN propagates
+ *  in the same way the legacy `split(':').map(Number)` pattern did, so the
+ *  switch is behavior-preserving for callers that already tolerate it. */
+export function parseTime(t: string): { hours: number; minutes: number } {
+  if (!TIME_FORMAT.test(t)) return { hours: NaN, minutes: NaN };
   const [h, m] = t.split(':').map(Number);
+  return { hours: h, minutes: m };
+}
+
+/** Convert "HH:MM" / "HH:MM:SS" to minutes-since-midnight. NaN on invalid. */
+export function toMinutes(t: string): number {
+  const { hours, minutes } = parseTime(t);
+  return hours * 60 + minutes;
+}
+
+export function fmtTime(t: string): string {
+  const { hours: h, minutes: m } = parseTime(t);
   const ampm = h >= 12 ? 'PM' : 'AM';
   const h12 = h % 12 || 12;
   return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
@@ -351,8 +388,7 @@ export function normalizeDoneTime(t: string): string {
 }
 
 export function addMinutes(t: string, mins: number): string {
-  const [h, m] = t.split(':').map(Number);
-  const total = h * 60 + m + mins;
+  const total = toMinutes(t) + mins;
   return `${Math.floor(total / 60).toString().padStart(2, '0')}:${(total % 60).toString().padStart(2, '0')}`;
 }
 
