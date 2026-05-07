@@ -1,5 +1,7 @@
 import { supabase } from './supabase.js';
 import { $id } from './utils.js';
+import { clearEventQueue } from './events.js';
+import { unsubscribeFromPush } from './push.js';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
 type AuthCallback = (userId: string | null) => void;
@@ -259,11 +261,103 @@ async function handleResendConfirmation(): Promise<void> {
   }
 }
 
+// --- Profile modal ---
+
+function showProfileModal(): void {
+  const modal = $id('profileModal');
+  const emailEl = $id('profileEmail');
+  const feedback = $id('profileFeedback');
+
+  feedback.textContent = '';
+  feedback.style.display = 'none';
+
+  supabase.auth.getUser().then(({ data: { user } }) => {
+    emailEl.textContent = user?.email ?? '—';
+  });
+
+  modal.classList.add('open');
+}
+
+function hideProfileModal(): void {
+  $id('profileModal').classList.remove('open');
+}
+
+function showProfileFeedback(msg: string, kind: 'success' | 'error'): void {
+  const el = $id('profileFeedback');
+  el.textContent = msg;
+  el.style.display = 'block';
+  el.dataset.kind = kind;
+}
+
+async function handleProfileCopyDeleteEmail(): Promise<void> {
+  const email = $id('profileDeleteEmail').textContent ?? '';
+  const btn = $id('profileDeleteCopyBtn') as HTMLButtonElement;
+  const original = btn.textContent ?? 'Copy';
+
+  try {
+    await navigator.clipboard.writeText(email);
+    btn.textContent = 'Copied';
+  } catch {
+    btn.textContent = 'Press Ctrl+C';
+    const range = document.createRange();
+    range.selectNodeContents($id('profileDeleteEmail'));
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+  }
+
+  setTimeout(() => { btn.textContent = original; }, 1600);
+}
+
+async function handleProfileResetPassword(): Promise<void> {
+  const btn = $id('profileResetBtn') as HTMLButtonElement;
+  const { data: { user } } = await supabase.auth.getUser();
+  const email = user?.email;
+
+  if (!email) {
+    showProfileFeedback("We couldn't find an email on your account.", 'error');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/`,
+  });
+
+  btn.disabled = false;
+  btn.textContent = 'Send reset link';
+
+  if (error) {
+    showProfileFeedback(error.message, 'error');
+  } else {
+    showProfileFeedback(`Reset link sent to ${email}. Check your inbox.`, 'success');
+  }
+}
+
 async function handleSignOut(): Promise<void> {
-  await supabase.auth.signOut();
-  // Hard reload clears all in-memory state, sessionStorage, and stops event sync.
-  // IDB is cleared separately before reload to prevent cross-user data leaks.
+  // Server-side cleanup must happen BEFORE signOut() — RLS rejects DELETEs
+  // once the session is gone. Without this, the previous user's
+  // push_subscriptions row keeps this browser's endpoint, so the server keeps
+  // pushing their reminders here even after the next user signs in.
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) {
+    await unsubscribeFromPush(user.id);
+  }
+
+  // Local stores that hold user data — clear before reload so a different
+  // user signing in next doesn't see leftover events or per-user prefs.
+  await clearEventQueue();
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('hidden_cal_')) localStorage.removeItem(k);
+  }
   sessionStorage.clear();
+
+  await supabase.auth.signOut();
+
+  // Hard reload kills in-memory state and pending reminder setTimeouts.
   window.location.reload();
 }
 
@@ -278,6 +372,15 @@ export function initAuth(): void {
   $id('authForgot').addEventListener('click', handleForgotPassword);
   $id('authResend').addEventListener('click', handleResendConfirmation);
   $id('signOutBtn').addEventListener('click', handleSignOut);
+
+  // Profile modal wiring
+  $id('profileBtn').addEventListener('click', showProfileModal);
+  $id('profileCloseBtn').addEventListener('click', hideProfileModal);
+  $id('profileResetBtn').addEventListener('click', handleProfileResetPassword);
+  $id('profileDeleteCopyBtn').addEventListener('click', handleProfileCopyDeleteEmail);
+  $id('profileModal').addEventListener('click', (e) => {
+    if ((e.target as HTMLElement).id === 'profileModal') hideProfileModal();
+  });
 
   // Password recovery modal wiring
   $id('passwordRecoverySave').addEventListener('click', handlePasswordRecoverySave);

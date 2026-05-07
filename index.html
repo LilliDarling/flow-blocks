@@ -157,6 +157,12 @@
         <line x1="3" y1="10" x2="21" y2="10"/>
       </svg>
     </button>
+    <button class="header-btn" id="profileBtn" aria-label="Profile">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+        <circle cx="12" cy="7" r="4"/>
+      </svg>
+    </button>
     <button class="sign-out-btn" id="signOutBtn" aria-label="Sign out">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
@@ -601,6 +607,39 @@
     <div class="modal-buttons">
       <button class="btn btn-ghost" id="passwordRecoveryCancel">Skip for now</button>
       <button class="btn btn-primary" id="passwordRecoverySave">Save password</button>
+    </div>
+  </div>
+</div>
+
+<!-- PROFILE MODAL -->
+<div class="modal-overlay" id="profileModal">
+  <div class="modal profile-modal">
+    <h2>Your account</h2>
+
+    <div class="profile-section">
+      <div class="profile-label">Signed in as</div>
+      <div class="profile-email" id="profileEmail"></div>
+    </div>
+
+    <div class="profile-feedback" id="profileFeedback" style="display:none"></div>
+
+    <div class="profile-section">
+      <div class="profile-section-heading">Reset your password</div>
+      <p class="profile-section-desc">We'll email you a link to set a new password. The link works for one hour.</p>
+      <button class="btn btn-primary profile-action-btn" id="profileResetBtn">Send reset link</button>
+    </div>
+
+    <div class="profile-section profile-section-danger">
+      <div class="profile-section-heading">Delete your account</div>
+      <p class="profile-section-desc">Account deletion is handled by hand for now so we can make sure your data is fully cleared. Email us from your account address and we'll take care of it.</p>
+      <div class="profile-copy-row">
+        <code class="profile-copy-value" id="profileDeleteEmail">lillith@valkyrieremedy.com</code>
+        <button class="btn btn-ghost profile-copy-btn" id="profileDeleteCopyBtn" type="button">Copy</button>
+      </div>
+    </div>
+
+    <div class="modal-buttons">
+      <button class="btn btn-ghost" id="profileCloseBtn">Close</button>
     </div>
   </div>
 </div>
