@@ -1,7 +1,8 @@
 import { supabase } from '../supabase.js';
 import type { CalendarConnection, CalendarEvent } from './types.js';
 import { registerProvider, getProvider, getAllProviders } from './registry.js';
-import { googleProvider } from './google.js';
+import { googleProvider, GOOGLE_REDIRECT_URI } from './google.js';
+import { isNative } from '../native.js';
 
 // Register all built-in providers
 registerProvider(googleProvider);
@@ -18,6 +19,16 @@ export async function loadConnections(userId: string): Promise<CalendarConnectio
   return (data || []) as CalendarConnection[];
 }
 
+/** Resolve the redirect URI used when starting OAuth, so we can echo the
+ *  same value during the code exchange (Google requires an exact match). */
+function redirectUriFor(provider: string): string {
+  if (provider === 'google') return GOOGLE_REDIRECT_URI;
+  // Fallback shape for any future non-Google provider
+  return isNative
+    ? `wildbloom://auth/${provider}-callback`
+    : `${window.location.origin}/auth/${provider}/callback`;
+}
+
 /** Handle the OAuth callback. The edge function exchanges the code, fetches
  *  account info, and upserts the connection server-side using the verified
  *  caller's user.id — refresh_token never crosses the wire to the client.
@@ -28,7 +39,7 @@ export async function handleOAuthCallback(
   code: string,
   _userId: string
 ): Promise<CalendarConnection | null> {
-  const redirectUri = `${window.location.origin}/auth/${provider}/callback`;
+  const redirectUri = redirectUriFor(provider);
 
   try {
     const { data, error } = await supabase.functions.invoke('calendar-oauth-exchange', {
@@ -45,6 +56,25 @@ export async function handleOAuthCallback(
     console.error('Calendar: OAuth exchange unavailable', err);
     return null;
   }
+}
+
+/** Validate CSRF state and run the exchange. Used by both the web
+ *  `checkOAuthRedirect` flow (URL parsed from window.location) and the native
+ *  deep-link handler (URL parsed from the appUrlOpen event). */
+async function validateAndExchange(
+  provider: string, code: string, state: string | null, userId: string,
+): Promise<CalendarConnection | null> {
+  const expectedState = sessionStorage.getItem('oauth_state');
+  const expectedProvider = sessionStorage.getItem('oauth_provider');
+  sessionStorage.removeItem('oauth_state');
+  sessionStorage.removeItem('oauth_provider');
+
+  if (!state || !expectedState || state !== expectedState || provider !== expectedProvider) {
+    console.error('Calendar: OAuth state mismatch — possible CSRF, ignoring callback');
+    return null;
+  }
+
+  return handleOAuthCallback(provider, code, userId);
 }
 
 /** Max events retained per day after merging across connected calendars. */
@@ -118,7 +148,8 @@ export async function disconnectCalendar(connectionId: string): Promise<void> {
   await supabase.from('calendar_connections').delete().eq('id', connectionId);
 }
 
-/** Check URL for OAuth callback params and handle them. */
+/** Check URL for OAuth callback params and handle them. Web only — the
+ *  native deep-link handler routes through `processNativeCallbackUrl` instead. */
 export async function checkOAuthRedirect(userId: string): Promise<CalendarConnection | null> {
   const url = new URL(window.location.href);
   const code = url.searchParams.get('code');
@@ -129,21 +160,34 @@ export async function checkOAuthRedirect(userId: string): Promise<CalendarConnec
 
   const provider = pathMatch[1];
 
-  // Verify the CSRF state issued by startAuth() matches the value Google
-  // echoed back. Mismatch = fabricated callback; drop the code unused.
-  const expectedState = sessionStorage.getItem('oauth_state');
-  const expectedProvider = sessionStorage.getItem('oauth_provider');
-  sessionStorage.removeItem('oauth_state');
-  sessionStorage.removeItem('oauth_provider');
-
-  // Clean the URL regardless — the code is single-use; never leave it sitting
-  // in history/referrers.
+  // Clean the URL regardless of CSRF outcome — the code is single-use;
+  // never leave it sitting in history/referrers.
   window.history.replaceState({}, '', '/');
 
-  if (!state || !expectedState || state !== expectedState || provider !== expectedProvider) {
-    console.error('Calendar: OAuth state mismatch — possible CSRF, ignoring callback');
+  return validateAndExchange(provider, code, state, userId);
+}
+
+/** Handle a native deep-link OAuth callback URL (e.g.
+ *  `wildbloom://auth/google-callback?code=…&state=…`). Same CSRF validation
+ *  and exchange as the web path; just a different way of getting the URL. */
+export async function processNativeCallbackUrl(
+  url: string, userId: string,
+): Promise<CalendarConnection | null> {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    console.error('Calendar: invalid deep-link URL', url);
     return null;
   }
 
-  return handleOAuthCallback(provider, code, userId);
+  const code = parsed.searchParams.get('code');
+  const state = parsed.searchParams.get('state');
+
+  // Path is e.g. `/auth/google-callback` — extract the provider segment.
+  const match = parsed.pathname.match(/\/auth\/([\w-]+)-callback/);
+  if (!code || !match) return null;
+  const provider = match[1];
+
+  return validateAndExchange(provider, code, state, userId);
 }

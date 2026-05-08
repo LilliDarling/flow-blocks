@@ -10,6 +10,19 @@
   <link rel="apple-touch-icon" href="/icons/icon.png">
   <!-- CSS is now imported via Tailwind in src/app.css -->
   <script>
+    // Native OAuth bridge — runs FIRST, before any other module loads.
+    // When a Capacitor app opens an in-app browser for Google calendar OAuth,
+    // Google won't accept `wildbloom://...` as a redirect (Web OAuth clients
+    // require https). So native uses this https URL as the registered
+    // redirect; this script bounces it to the custom scheme so the OS routes
+    // back into the app's deep-link handler. Web users never hit this path.
+    (function() {
+      if (window.location.pathname === '/auth/google/native-bridge') {
+        window.location.replace('wildbloom://auth/google-callback' + window.location.search);
+      }
+    })();
+  </script>
+  <script>
     // Apply theme early to prevent flash — dark is default
     (function() {
       var saved = localStorage.getItem('theme');
@@ -631,10 +644,19 @@
 
     <div class="profile-section profile-section-danger">
       <div class="profile-section-heading">Delete your account</div>
-      <p class="profile-section-desc">Account deletion is handled by hand for now so we can make sure your data is fully cleared. Email us from your account address and we'll take care of it.</p>
-      <div class="profile-copy-row">
-        <code class="profile-copy-value" id="profileDeleteEmail">lillith@valkyrieremedy.com</code>
-        <button class="btn btn-ghost profile-copy-btn" id="profileDeleteCopyBtn" type="button">Copy</button>
+      <p class="profile-section-desc">This permanently removes your account and all your data — blocks, reminders, energy logs, calendar connections. Cannot be undone.</p>
+
+      <div id="profileDeleteIntro">
+        <button class="btn btn-danger profile-action-btn" id="profileDeleteBtn" type="button">Delete account</button>
+      </div>
+
+      <div class="profile-delete-confirm" id="profileDeleteConfirm" style="display:none">
+        <p class="profile-delete-confirm-prompt">Type your email (<strong id="profileDeleteEmailHint"></strong>) to confirm:</p>
+        <input type="email" id="profileDeleteConfirmInput" placeholder="you@example.com" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <div class="profile-delete-confirm-actions">
+          <button class="btn btn-ghost" id="profileDeleteCancelBtn" type="button">Cancel</button>
+          <button class="btn btn-danger" id="profileDeleteFinalBtn" type="button" disabled>Permanently delete</button>
+        </div>
       </div>
     </div>
 
@@ -703,41 +725,129 @@
   <div class="legal-page-inner">
     <button class="legal-back" id="privacyBack">&larr; Back</button>
     <h2>Privacy Policy</h2>
-    <p class="legal-updated">Last updated: March 27, 2026</p>
+    <p class="legal-updated">Last updated: May 7, 2026</p>
 
     <h3>1. Information We Collect</h3>
-    <p>When you create an account, we collect your email address and authentication credentials. As you use Wildbloom, we store the data you create: time blocks, energy logs, pomodoro sessions, reminders, done-list items, and calendar connections.</p>
+    <p>We collect only what's needed to run the app on your behalf. There are no analytics scripts, no tracking cookies, and no cross-user model training.</p>
+
+    <p><strong>Account information</strong> (required for sign-in):</p>
+    <ul>
+      <li>Email address</li>
+      <li>Hashed password (we never see or store your password in readable form)</li>
+      <li>A randomly-generated user ID</li>
+      <li>If you sign in with Google: your Google account email and the Google account identifier</li>
+      <li>Active session tokens, cleared when you sign out</li>
+    </ul>
+
+    <p><strong>App content you create</strong>:</p>
+    <ul>
+      <li>Tasks (blocks): titles, types, times, options, durations, completion status</li>
+      <li>Done-list entries</li>
+      <li>Energy check-ins (low / med / high) with timestamps</li>
+      <li>Pomodoro sessions: mode, duration, optional task name, completion time</li>
+      <li>Reminders: name, icon, time, days</li>
+      <li>An event log of your in-app actions (block completed, energy logged, pomodoro finished, etc.) — used only to surface patterns to you. Never sent to anyone else, never aggregated across users.</li>
+      <li>Confirmed pattern weights derived from your own events (e.g. "high energy correlates with completing flow-type tasks for you specifically")</li>
+    </ul>
+
+    <p><strong>Calendar (only if you connect a calendar)</strong>:</p>
+    <ul>
+      <li>OAuth tokens for your Google Calendar connection (stored server-side; the refresh token never reaches your device's app code)</li>
+      <li>The Google account email associated with the connection</li>
+      <li>The list of calendar IDs you choose to display</li>
+      <li>We <strong>do not</strong> store your calendar events. Events are fetched live from Google when you view the day or week, displayed on your device, and discarded</li>
+    </ul>
+
+    <p><strong>Notifications (only if you enable them)</strong>:</p>
+    <ul>
+      <li>A push subscription endpoint or device token (Web Push for the browser; FCM token on Android; APNs token on iOS)</li>
+      <li>Your timezone, so notifications fire at the correct local time</li>
+    </ul>
+
+    <p><strong>What we do NOT collect</strong>: location, camera or microphone access, contacts, photos, files, biometric data, payment information, advertising identifiers, or any data about other apps on your device.</p>
 
     <h3>2. How We Use Your Data</h3>
-    <p>Your data is used solely to provide and improve the Wildbloom service. We use it to sync your schedule across devices, generate your energy analytics, send reminders you configure, and display your calendar events. We do not use your data for advertising or profiling.</p>
+    <p>Your data is used solely to provide and improve Wildbloom for you specifically. We use it to:</p>
+    <ul>
+      <li>Sync your schedule across your devices</li>
+      <li>Generate your personal energy analytics and pattern insights</li>
+      <li>Deliver reminders and pomodoro completion notifications you've configured</li>
+      <li>Display your calendar events on the day and week views</li>
+      <li>Authenticate you when you sign in</li>
+    </ul>
+    <p>We do not use your data for advertising, profiling, or any cross-user analysis. Insights are computed against your own events only — there is no shared model.</p>
 
     <h3>3. Data Storage &amp; Security</h3>
-    <p>All data is stored in Supabase with row-level security enabled, meaning only you can access your own data. Connections are encrypted in transit via TLS. Calendar OAuth tokens are stored encrypted and are only used to fetch your calendar events.</p>
+    <p>Your data is stored in Supabase (PostgreSQL hosted on AWS). Row-level security is enabled on every table, meaning only you can read or modify your own rows.</p>
+    <p>All data in transit between the app and our backend is encrypted via TLS (HTTPS). Data at rest is encrypted at the storage layer by our infrastructure provider. OAuth refresh tokens for calendar connections live only in the database — they are never sent to client devices.</p>
 
     <h3>4. Data Retention</h3>
     <p>We retain data only as long as needed:</p>
     <ul>
-      <li>Recurring blocks, settings, and reminders are kept as long as your account exists.</li>
-      <li>One-off blocks are removed 7 days after their scheduled date.</li>
-      <li>Daily completions are kept for 7 days.</li>
-      <li>Done-list items, energy logs, and pomodoro sessions are kept for 30 days.</li>
-      <li>Reminder completion history is kept for 30 days.</li>
+      <li>Account information, recurring blocks, reminders, settings, learned patterns, and active calendar connections — kept for the lifetime of your account</li>
+      <li>One-off blocks — removed 7 days after their scheduled date</li>
+      <li>Daily block completions — kept for 7 days</li>
+      <li>Done-list items, energy logs, pomodoro sessions, and reminder completion history — kept for 30 days</li>
+      <li>The event log — kept for 60 days (long enough for weekly patterns to confirm; learned patterns persist after the raw events expire)</li>
+      <li>Push notification dedup logs — kept for short windows (1–7 days) to prevent duplicate notifications</li>
     </ul>
-    <p>Automated cleanup runs nightly.</p>
+    <p>Automated cleanup runs nightly. Sign-in security logs (IP address, user agent) retained by our infrastructure provider expire automatically within 30 days.</p>
 
     <h3>5. Third-Party Services</h3>
-    <p>We use the following third-party services:</p>
+    <p>Wildbloom uses these third-party services:</p>
     <ul>
-      <li><strong>Supabase</strong> — database, authentication, and edge functions.</li>
-      <li><strong>Google Calendar API</strong> — only when you connect your calendar, and only to read event data.</li>
+      <li><strong>Supabase</strong> — database, authentication, and edge functions. Our entire backend.</li>
+      <li><strong>Google Cloud Messaging (FCM)</strong> — delivers push notifications to Android devices and (proxied through FCM) to iOS devices. Notification content (e.g. a reminder name like "💊 Take vitamin D") passes through Google's infrastructure to reach your device.</li>
+      <li><strong>Apple Push Notification service (APNs)</strong> — delivers push notifications on iOS, in coordination with FCM.</li>
+      <li><strong>Web Push services</strong> — when using Wildbloom in a browser, push notifications are delivered via the browser vendor's push service (Mozilla, Google, or Apple).</li>
+      <li><strong>Google Calendar API</strong> — only when you connect your calendar. Used solely to read event data for display. Read-only access.</li>
     </ul>
-    <p>We do not share, sell, or rent your personal data to any other third parties.</p>
+    <p>We do not share, sell, or rent your personal data to any other third parties. We do not use any analytics or tracking services.</p>
 
-    <h3>6. Your Rights</h3>
-    <p>You can export or delete your data at any time by contacting us. Deleting your account removes all associated data from our systems.</p>
+    <h3 id="account-deletion">6. Managing &amp; Deleting Your Data</h3>
 
-    <h3>7. Cookies</h3>
-    <p>Wildbloom does not use tracking cookies or analytics scripts. We use local storage only for theme preference and session management.</p>
+    <p><strong>Deleting specific items.</strong> You can delete individual pieces of your data directly within the app, without removing your account:</p>
+    <ul>
+      <li><strong>Tasks &amp; blocks</strong> — tap the block, then choose Delete. For recurring blocks you can delete just the day's occurrence, all future occurrences, or all occurrences.</li>
+      <li><strong>Reminders</strong> — open the reminder, tap Delete in the edit dialog.</li>
+      <li><strong>Done-list items</strong> — tap the item to remove it from the list.</li>
+      <li><strong>Calendar connections</strong> — open Calendar Settings (the calendar icon in the top header), then tap Disconnect on any connected account. This revokes the OAuth token and removes the connection record.</li>
+    </ul>
+    <p>Transient data such as daily completions, energy logs, done-list items, pomodoro sessions, and the in-app event log is automatically removed on a rolling schedule (7 to 60 days depending on the data type — see <a href="#privacy">Data Retention</a> above) without requiring any action from you.</p>
+
+    <p><strong>Deleting your account and all data.</strong> You can permanently delete your Wildbloom account and everything associated with it at any time, directly from within the app.</p>
+
+    <p>From inside the app:</p>
+    <ol>
+      <li>Open Wildbloom and sign in.</li>
+      <li>Tap the profile icon in the top-right of the header.</li>
+      <li>In the Profile menu, scroll to the "Delete account" section.</li>
+      <li>Tap <strong>Delete account</strong>, type your account email to confirm, then tap <strong>Permanently delete</strong>.</li>
+    </ol>
+
+    <p><strong>What gets deleted:</strong></p>
+    <ul>
+      <li>Your account credentials (email and hashed password)</li>
+      <li>All blocks, reminders, energy logs, pomodoro sessions, and done-list items</li>
+      <li>Your event history and any learned patterns</li>
+      <li>Push notification registrations on every device</li>
+      <li>Calendar connection tokens (this disconnects Wildbloom from your Google Calendar — your calendar data itself is unaffected)</li>
+      <li>All preferences and settings</li>
+    </ul>
+
+    <p><strong>Retention after deletion:</strong> there is no soft-delete, no trash, and no grace period. Your data is removed within seconds of confirmation and cannot be restored. Routine sign-in logs (IP address, user agent) retained by our infrastructure provider expire automatically within 30 days; these logs contain no user-generated content and are not used by Wildbloom.</p>
+
+    <p><strong>If you cannot sign in:</strong> email <a href="mailto:lillith@valkyrieremedy.com">lillith@valkyrieremedy.com</a> from your account email address with the subject "Delete my Wildbloom account." We will verify ownership and remove the account within 7 business days.</p>
+
+    <h3>7. Local Storage on Your Device</h3>
+    <p>Wildbloom stores some data locally on your device for offline operation and to remember your preferences:</p>
+    <ul>
+      <li>An event queue (in IndexedDB) that buffers actions when you're offline and syncs to our backend when you reconnect</li>
+      <li>Your theme preference</li>
+      <li>An authentication token (so you stay signed in across visits)</li>
+      <li>A few small preference values (e.g. dismissed banners, hidden calendar event IDs)</li>
+    </ul>
+    <p>We do not use tracking cookies. The authentication token and event queue are cleared when you sign out or delete your account.</p>
 
     <h3>8. Changes to This Policy</h3>
     <p>We may update this policy from time to time. Material changes will be communicated through the app. Continued use of Wildbloom after changes constitutes acceptance of the updated policy.</p>

@@ -13,6 +13,7 @@ import { emit, diff, MutationSource } from './events.js';
 import {
   CalendarEvent, CalendarConnection,
   loadConnections, fetchAllEvents, disconnectCalendar, checkOAuthRedirect,
+  processNativeCallbackUrl,
 } from './calendar/index.js';
 
 export interface PomoState {
@@ -449,18 +450,28 @@ class AppState {
   async checkCalendarRedirect(): Promise<boolean> {
     if (!this.userId) return false;
     const conn = await checkOAuthRedirect(this.userId);
-    if (conn) {
-      this.calendarConnections.push(conn);
-      emit({
-        type: 'calendar.connected',
-        entity_id: conn.id,
-        entity_type: null,
-        payload: { provider: conn.provider, display_name: conn.display_name },
-      });
-      await this.loadCalendar();
-      return true;
-    }
-    return false;
+    return conn ? this.applyNewCalendarConnection(conn) : false;
+  }
+
+  /** Native deep-link entry point — called from native.ts's appUrlOpen
+   *  listener when a `wildbloom://auth/<provider>-callback?code=…` URL
+   *  arrives. Same downstream effect as checkCalendarRedirect on web. */
+  async applyNativeCalendarCallback(url: string): Promise<boolean> {
+    if (!this.userId) return false;
+    const conn = await processNativeCallbackUrl(url, this.userId);
+    return conn ? this.applyNewCalendarConnection(conn) : false;
+  }
+
+  private async applyNewCalendarConnection(conn: CalendarConnection): Promise<boolean> {
+    this.calendarConnections.push(conn);
+    emit({
+      type: 'calendar.connected',
+      entity_id: conn.id,
+      entity_type: null,
+      payload: { provider: conn.provider, display_name: conn.display_name },
+    });
+    await this.loadCalendar();
+    return true;
   }
 
   async removeCalendarConnection(connectionId: string): Promise<void> {

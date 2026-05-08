@@ -1,32 +1,57 @@
 import type { CalendarProvider, CalendarConnection, CalendarEvent } from './types.js';
 import { supabase } from '../supabase.js';
+import { isNative } from '../native.js';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
-const REDIRECT_URI = `${window.location.origin}/auth/google/callback`;
+
+// Native uses an https bridge URL because Google's Web OAuth client refuses
+// custom URI schemes. The bridge is a tiny inline script in index.html that
+// intercepts this path and redirects to `wildbloom://auth/google-callback?…`
+// — that custom scheme is what the deep-link listener in native.ts catches.
+const NATIVE_GOOGLE_REDIRECT = 'https://app.growingme.co/auth/google/native-bridge';
+
+export const GOOGLE_REDIRECT_URI = isNative
+  ? NATIVE_GOOGLE_REDIRECT
+  : `${window.location.origin}/auth/google/callback`;
 
 export const googleProvider: CalendarProvider = {
   id: 'google',
   name: 'Google Calendar',
 
-  startAuth(): void {
+  async startAuth(): Promise<void> {
     // CSRF protection: random state stored in sessionStorage, echoed by Google,
     // verified on callback. Without this, an attacker could feed a victim a
-    // crafted /auth/google/callback?code=… link to attach an attacker-owned
-    // Google account to the victim's session.
+    // crafted callback link to attach an attacker-owned Google account to
+    // the victim's session.
+    //
+    // Native note: the in-app Browser plugin overlays the WebView without
+    // killing it, so sessionStorage survives. If the OS aggressively kills
+    // the app while the user is on Google's consent screen, this state is
+    // lost and the callback will fail CSRF — they retry. Failing closed is
+    // the correct behavior for a CSRF check.
     const state = crypto.randomUUID();
     sessionStorage.setItem('oauth_state', state);
     sessionStorage.setItem('oauth_provider', 'google');
 
     const params = new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
-      redirect_uri: REDIRECT_URI,
+      redirect_uri: GOOGLE_REDIRECT_URI,
       response_type: 'code',
       scope: 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/userinfo.email',
       access_type: 'offline',
       prompt: 'select_account consent',
       state,
     });
-    window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+    const url = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+
+    if (isNative) {
+      // In-app browser. Google redirects to wildbloom://auth/google-callback
+      // which the OS routes back into the app via the deep-link listener.
+      const { Browser } = await import('@capacitor/browser');
+      await Browser.open({ url, presentationStyle: 'popover' });
+    } else {
+      window.location.href = url;
+    }
   },
 
   async fetchEvents(connection: CalendarConnection, date: string): Promise<CalendarEvent[]> {

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Wildbloom</string>
+    <string name="title_activity_main">Wildbloom</string>
+    <string name="package_name">com.wildbloom.app</string>
+    <string name="custom_url_scheme">com.wildbloom.app</string>
+</resources>
