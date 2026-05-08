@@ -32,8 +32,9 @@ export interface CalendarProvider {
   readonly id: string;
   /** Display name, e.g. "Google Calendar" */
   readonly name: string;
-  /** Start the OAuth flow (redirects the user). */
-  startAuth(): void;
+  /** Start the OAuth flow. On web this navigates the page; on native it
+   *  opens an in-app browser, so the call is async on both. */
+  startAuth(): Promise<void>;
   /** Fetch events for a given date using a stored connection. */
   fetchEvents(connection: CalendarConnection, date: string): Promise<CalendarEvent[]>;
   /** Refresh an expired access token. Returns the new token + expiry. */

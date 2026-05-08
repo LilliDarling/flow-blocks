@@ -202,6 +202,11 @@ async function cancelNativeCompletion(): Promise<void> {
 // --- Notifications ---
 
 async function requestNotificationPermission(): Promise<void> {
+  // On native, LocalNotifications.requestPermissions() is invoked inside
+  // scheduleNativeCompletion when the timer starts — that's the path that
+  // actually surfaces the OS permission dialog. The Web Notification API
+  // is unrelated.
+  if (isNative) return;
   if (!('Notification' in window)) return;
   if (Notification.permission === 'default') {
     await Notification.requestPermission();

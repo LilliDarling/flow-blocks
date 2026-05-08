@@ -11,8 +11,16 @@ const VAPID_SUBJECT = Deno.env.get('VAPID_SUBJECT') || 'mailto:noreply@wildbloom
 const VAPID_PUBLIC_KEY = Deno.env.get('VAPID_PUBLIC_KEY')!;
 const VAPID_PRIVATE_KEY = Deno.env.get('VAPID_PRIVATE_KEY')!;
 
+// FCM HTTP v1 — credentials for native push dispatch (Android/iOS via Capacitor).
+// Both must be set for native delivery; if absent, native dispatch is skipped
+// and the function still serves Web Push subscribers.
+const FCM_PROJECT_ID = Deno.env.get('FCM_PROJECT_ID') || '';
+const FCM_SERVICE_ACCOUNT_KEY = Deno.env.get('FCM_SERVICE_ACCOUNT_KEY') || '';
+
 // deno-lint-ignore no-explicit-any
 type Sub = any;
+// deno-lint-ignore no-explicit-any
+type DeviceToken = any;
 // deno-lint-ignore no-explicit-any
 type BlockRow = any;
 // deno-lint-ignore no-explicit-any
@@ -20,11 +28,12 @@ type ReminderRow = any;
 
 interface Ctx {
   supabase: SupabaseClient;
-  subsByUser: Map<string, Sub[]>;
+  userIds: Set<string>;
   reminders: ReminderRow[];
   blocks: BlockRow[];
   now: Date;
-  sendToAll: (userSubs: Sub[], payload: string) => Promise<number>;
+  getTimezone: (userId: string) => string;
+  sendToAll: (userId: string, payload: string) => Promise<number>;
 }
 
 // ── Base64url helpers ───────────────────────────────────────────────
@@ -154,6 +163,169 @@ async function sendPush(
   return resp.status;
 }
 
+// ── FCM HTTP v1 (native push) ──────────────────────────────────────
+
+interface FcmServiceAccount {
+  client_email: string;
+  private_key: string;
+  token_uri: string;
+}
+
+let cachedFcmAccount: FcmServiceAccount | null | undefined = undefined;
+
+function getFcmAccount(): FcmServiceAccount | null {
+  if (cachedFcmAccount !== undefined) return cachedFcmAccount;
+  if (!FCM_SERVICE_ACCOUNT_KEY) {
+    cachedFcmAccount = null;
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(FCM_SERVICE_ACCOUNT_KEY) as FcmServiceAccount;
+    if (!parsed.client_email || !parsed.private_key || !parsed.token_uri) {
+      console.error('[fcm] service account JSON missing required fields');
+      cachedFcmAccount = null;
+      return null;
+    }
+    cachedFcmAccount = parsed;
+    return parsed;
+  } catch (err) {
+    console.error('[fcm] failed to parse FCM_SERVICE_ACCOUNT_KEY:', err);
+    cachedFcmAccount = null;
+    return null;
+  }
+}
+
+async function importPkcs8PrivateKey(pem: string): Promise<CryptoKey> {
+  const b64 = pem
+    .replace(/-----BEGIN PRIVATE KEY-----/, '')
+    .replace(/-----END PRIVATE KEY-----/, '')
+    .replace(/\s+/g, '');
+  const der = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  return crypto.subtle.importKey(
+    'pkcs8', der,
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false, ['sign'],
+  );
+}
+
+/** Mint a fresh OAuth access token for FCM. Token is valid 1h; one mint per
+ * function invocation amortizes across all sends. */
+async function mintFcmAccessToken(): Promise<string | null> {
+  const account = getFcmAccount();
+  if (!account) return null;
+  if (!FCM_PROJECT_ID) {
+    console.error('[fcm] FCM_PROJECT_ID is not set');
+    return null;
+  }
+
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const header = b64url(new TextEncoder().encode(JSON.stringify({ alg: 'RS256', typ: 'JWT' })));
+    const claims = b64url(new TextEncoder().encode(JSON.stringify({
+      iss: account.client_email,
+      scope: 'https://www.googleapis.com/auth/firebase.messaging',
+      aud: account.token_uri,
+      iat: now,
+      exp: now + 3600,
+    })));
+    const unsigned = `${header}.${claims}`;
+
+    const key = await importPkcs8PrivateKey(account.private_key);
+    const sig = new Uint8Array(await crypto.subtle.sign(
+      'RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(unsigned),
+    ));
+    const jwt = `${unsigned}.${b64url(sig)}`;
+
+    const resp = await fetch(account.token_uri, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
+    });
+
+    if (!resp.ok) {
+      const errBody = await resp.text().catch(() => '');
+      console.error(`[fcm] token exchange failed ${resp.status}: ${errBody}`);
+      return null;
+    }
+    const json = await resp.json() as { access_token?: string };
+    return json.access_token || null;
+  } catch (err) {
+    console.error('[fcm] mintFcmAccessToken error:', err);
+    return null;
+  }
+}
+
+interface FcmResult {
+  status: number;
+  shouldDelete: boolean;
+}
+
+/** Send one notification via FCM HTTP v1. The web payload (a JSON string) is
+ * mapped: title/body → notification, everything else → data (FCM data values
+ * must all be strings). Returns shouldDelete=true on signals that the token
+ * is permanently invalid (uninstalled, replaced) so the caller can prune. */
+async function sendFCM(
+  token: string, platform: string, payloadJson: string, accessToken: string,
+): Promise<FcmResult> {
+  let p: Record<string, unknown>;
+  try {
+    p = JSON.parse(payloadJson);
+  } catch {
+    p = {};
+  }
+
+  const data: Record<string, string> = {};
+  if (p.url) data.url = String(p.url);
+  if (p.tag) data.tag = String(p.tag);
+  if (p.type) data.type = String(p.type);
+  if (p.blockId) data.blockId = String(p.blockId);
+
+  const message: Record<string, unknown> = {
+    token,
+    notification: {
+      title: typeof p.title === 'string' ? p.title : '',
+      body: typeof p.body === 'string' ? p.body : '',
+    },
+    data,
+  };
+
+  if (platform === 'android') {
+    message.android = { priority: 'high' };
+  } else if (platform === 'ios') {
+    message.apns = {
+      headers: { 'apns-priority': '10' },
+      payload: { aps: { sound: 'default' } },
+    };
+  }
+
+  const resp = await fetch(
+    `https://fcm.googleapis.com/v1/projects/${FCM_PROJECT_ID}/messages:send`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ message }),
+    },
+  );
+
+  if (resp.ok) return { status: resp.status, shouldDelete: false };
+
+  const errBody = await resp.text().catch(() => '');
+  console.error(`[fcm] ${resp.status}: ${errBody.slice(0, 200)} platform=${platform} token=…${token.slice(-8)}`);
+
+  // 404 = token not registered; 400 with UNREGISTERED/INVALID_ARGUMENT for the
+  // token itself = device replaced/uninstalled. Other 400s are bad payloads
+  // (bug on our side) — don't delete the token for those.
+  let shouldDelete = false;
+  if (resp.status === 404) shouldDelete = true;
+  else if (resp.status === 400 && /UNREGISTERED|registration-token-not-registered/i.test(errBody)) {
+    shouldDelete = true;
+  }
+  return { status: resp.status, shouldDelete };
+}
+
 // ── Shared helpers ──────────────────────────────────────────────────
 
 function localMinutesSinceMidnight(date: Date, timezone: string): number {
@@ -217,8 +389,8 @@ async function handleReminders(ctx: Ctx): Promise<number> {
   let sent = 0;
   if (!ctx.reminders || ctx.reminders.length === 0) return sent;
 
-  for (const [userId, userSubs] of ctx.subsByUser) {
-    const tz = userSubs[0].timezone || 'UTC';
+  for (const userId of ctx.userIds) {
+    const tz = ctx.getTimezone(userId);
     const localDate = ctx.now.toLocaleDateString('en-CA', { timeZone: tz });
     const localDow = localDayOfWeek(ctx.now, tz);
     const nowMinutes = localMinutesSinceMidnight(ctx.now, tz);
@@ -258,7 +430,7 @@ async function handleReminders(ctx: Ctx): Promise<number> {
         tag: `reminder-${reminder.id}`,
         url: '/',
       });
-      sent += await ctx.sendToAll(userSubs, payload);
+      sent += await ctx.sendToAll(userId, payload);
     }
   }
   return sent;
@@ -274,8 +446,7 @@ async function handlePomoTimers(ctx: Ctx): Promise<number> {
   if (!duePomo || duePomo.length === 0) return sent;
 
   for (const timer of duePomo) {
-    const userSubs = ctx.subsByUser.get(timer.user_id);
-    if (userSubs) {
+    if (ctx.userIds.has(timer.user_id)) {
       const title = timer.mode === 'focus' ? 'Focus complete' : 'Break over';
       const body = timer.mode === 'focus'
         ? (timer.task ? `"${timer.task}" — time for a break.` : 'Great work — time for a break.')
@@ -285,7 +456,7 @@ async function handlePomoTimers(ctx: Ctx): Promise<number> {
         title, body, icon: '/icons/icon.png',
         tag: 'pomo-complete', url: '/', type: 'pomo-complete',
       });
-      sent += await ctx.sendToAll(userSubs, payload);
+      sent += await ctx.sendToAll(timer.user_id, payload);
     }
     await ctx.supabase.from('pomo_active_timers').delete().eq('user_id', timer.user_id);
   }
@@ -296,8 +467,8 @@ async function handleDailyNudge(ctx: Ctx): Promise<number> {
   let sent = 0;
   const NUDGE_HOUR = 20;
 
-  for (const [userId, userSubs] of ctx.subsByUser) {
-    const tz = userSubs[0].timezone || 'UTC';
+  for (const userId of ctx.userIds) {
+    const tz = ctx.getTimezone(userId);
     const localDate = ctx.now.toLocaleDateString('en-CA', { timeZone: tz });
     const nowMinutes = localMinutesSinceMidnight(ctx.now, tz);
 
@@ -315,7 +486,7 @@ async function handleDailyNudge(ctx: Ctx): Promise<number> {
       icon: '/icons/icon.png',
       tag: 'daily-review', url: '/', type: 'daily-review',
     });
-    sent += await ctx.sendToAll(userSubs, payload);
+    sent += await ctx.sendToAll(userId, payload);
   }
   return sent;
 }
@@ -323,8 +494,8 @@ async function handleDailyNudge(ctx: Ctx): Promise<number> {
 async function handleBlockStartNudge(ctx: Ctx, completions: Map<string, string>): Promise<number> {
   let sent = 0;
 
-  for (const [userId, userSubs] of ctx.subsByUser) {
-    const tz = userSubs[0].timezone || 'UTC';
+  for (const userId of ctx.userIds) {
+    const tz = ctx.getTimezone(userId);
     const localDate = ctx.now.toLocaleDateString('en-CA', { timeZone: tz });
     const localDow = localDayOfWeek(ctx.now, tz);
     const nowMinutes = localMinutesSinceMidnight(ctx.now, tz);
@@ -351,7 +522,7 @@ async function handleBlockStartNudge(ctx: Ctx, completions: Map<string, string>)
         tag: `block-start-${block.id}`,
         url: '/', type: 'block-start',
       });
-      sent += await ctx.sendToAll(userSubs, payload);
+      sent += await ctx.sendToAll(userId, payload);
     }
   }
   return sent;
@@ -360,8 +531,8 @@ async function handleBlockStartNudge(ctx: Ctx, completions: Map<string, string>)
 async function handleBlockEndCheckin(ctx: Ctx, completions: Map<string, string>): Promise<number> {
   let sent = 0;
 
-  for (const [userId, userSubs] of ctx.subsByUser) {
-    const tz = userSubs[0].timezone || 'UTC';
+  for (const userId of ctx.userIds) {
+    const tz = ctx.getTimezone(userId);
     const localDate = ctx.now.toLocaleDateString('en-CA', { timeZone: tz });
     const localDow = localDayOfWeek(ctx.now, tz);
     const nowMinutes = localMinutesSinceMidnight(ctx.now, tz);
@@ -387,7 +558,7 @@ async function handleBlockEndCheckin(ctx: Ctx, completions: Map<string, string>)
         url: '/', type: 'block-complete',
         blockId: block.id,
       });
-      sent += await ctx.sendToAll(userSubs, payload);
+      sent += await ctx.sendToAll(userId, payload);
     }
   }
   return sent;
@@ -396,8 +567,8 @@ async function handleBlockEndCheckin(ctx: Ctx, completions: Map<string, string>)
 async function handleMorningBrief(ctx: Ctx, completions: Map<string, string>): Promise<number> {
   let sent = 0;
 
-  for (const [userId, userSubs] of ctx.subsByUser) {
-    const tz = userSubs[0].timezone || 'UTC';
+  for (const userId of ctx.userIds) {
+    const tz = ctx.getTimezone(userId);
     const localDate = ctx.now.toLocaleDateString('en-CA', { timeZone: tz });
     const localDow = localDayOfWeek(ctx.now, tz);
     const nowMinutes = localMinutesSinceMidnight(ctx.now, tz);
@@ -430,7 +601,7 @@ async function handleMorningBrief(ctx: Ctx, completions: Map<string, string>): P
       tag: 'morning-brief',
       url: '/', type: 'daily-review',
     });
-    sent += await ctx.sendToAll(userSubs, payload);
+    sent += await ctx.sendToAll(userId, payload);
   }
   return sent;
 }
@@ -439,8 +610,8 @@ async function handleMiddayPulse(ctx: Ctx, completions: Map<string, string>): Pr
   let sent = 0;
   const MIDDAY_HOUR = 13;
 
-  for (const [userId, userSubs] of ctx.subsByUser) {
-    const tz = userSubs[0].timezone || 'UTC';
+  for (const userId of ctx.userIds) {
+    const tz = ctx.getTimezone(userId);
     const localDate = ctx.now.toLocaleDateString('en-CA', { timeZone: tz });
     const localDow = localDayOfWeek(ctx.now, tz);
     const nowMinutes = localMinutesSinceMidnight(ctx.now, tz);
@@ -476,7 +647,7 @@ async function handleMiddayPulse(ctx: Ctx, completions: Map<string, string>): Pr
       tag: 'midday-pulse',
       url: '/', type: 'daily-review',
     });
-    sent += await ctx.sendToAll(userSubs, payload);
+    sent += await ctx.sendToAll(userId, payload);
   }
   return sent;
 }
@@ -485,8 +656,8 @@ async function handleWeeklyRecap(ctx: Ctx): Promise<number> {
   let sent = 0;
   const RECAP_HOUR = 19;
 
-  for (const [userId, userSubs] of ctx.subsByUser) {
-    const tz = userSubs[0].timezone || 'UTC';
+  for (const userId of ctx.userIds) {
+    const tz = ctx.getTimezone(userId);
     const localDow = localDayOfWeek(ctx.now, tz);
     if (localDow !== 6) continue; // Sunday only
 
@@ -547,7 +718,7 @@ async function handleWeeklyRecap(ctx: Ctx): Promise<number> {
       tag: 'weekly-recap',
       url: '/', type: 'daily-review',
     });
-    sent += await ctx.sendToAll(userSubs, payload);
+    sent += await ctx.sendToAll(userId, payload);
   }
   return sent;
 }
@@ -556,8 +727,8 @@ async function handlePoolNudge(ctx: Ctx, completions: Map<string, string>): Prom
   let sent = 0;
   const POOL_NUDGE_HOUR = 14; // 2 PM
 
-  for (const [userId, userSubs] of ctx.subsByUser) {
-    const tz = userSubs[0].timezone || 'UTC';
+  for (const userId of ctx.userIds) {
+    const tz = ctx.getTimezone(userId);
     const localDate = ctx.now.toLocaleDateString('en-CA', { timeZone: tz });
     const localDow = localDayOfWeek(ctx.now, tz);
     const nowMinutes = localMinutesSinceMidnight(ctx.now, tz);
@@ -599,35 +770,64 @@ async function handlePoolNudge(ctx: Ctx, completions: Map<string, string>): Prom
       tag: 'pool-nudge',
       url: '/', type: 'daily-review',
     });
-    sent += await ctx.sendToAll(userSubs, payload);
+    sent += await ctx.sendToAll(userId, payload);
   }
   return sent;
 }
 
 // ── Main handler ────────────────────────────────────────────────────
 
-serve(async () => {
+serve(async (req) => {
+  // This function is invoked only by pg_cron (every minute), which sends the
+  // service-role key in the Authorization header. Reject anything else —
+  // otherwise any authenticated user (or anyone with the public anon key)
+  // could spam this endpoint to fan out notifications and burn quota.
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const authHeader = req.headers.get('Authorization');
+  if (authHeader !== `Bearer ${serviceRoleKey}`) {
+    return new Response(JSON.stringify({ error: 'Forbidden' }), {
+      status: 403,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    serviceRoleKey,
   );
 
-  const { data: subs, error: subsErr } = await supabase
-    .from('push_subscriptions')
-    .select('*');
+  // Fetch web subscriptions and native device tokens in parallel.
+  // Either may be empty independently — a user might have only one channel.
+  const [
+    { data: subs, error: subsErr },
+    { data: tokens, error: tokensErr },
+  ] = await Promise.all([
+    supabase.from('push_subscriptions').select('*'),
+    supabase.from('device_push_tokens').select('*'),
+  ]);
 
-  if (subsErr || !subs || subs.length === 0) {
+  if (subsErr) console.error('[push] fetch push_subscriptions failed:', subsErr.message);
+  if (tokensErr) console.error('[push] fetch device_push_tokens failed:', tokensErr.message);
+
+  const subsList: Sub[] = subs || [];
+  const tokensList: DeviceToken[] = tokens || [];
+
+  if (subsList.length === 0 && tokensList.length === 0) {
     return new Response(JSON.stringify({ sent: 0 }), {
       headers: { 'Content-Type': 'application/json' },
     });
   }
 
-  const userIds = [...new Set(subs.map((s: { user_id: string }) => s.user_id))];
+  // Union of users with any subscription channel — handlers iterate this set.
+  const userIdSet = new Set<string>();
+  for (const s of subsList) userIdSet.add(s.user_id);
+  for (const t of tokensList) userIdSet.add(t.user_id);
+  const userIdsArr = [...userIdSet];
 
   // Fetch shared data once
   const [{ data: reminders }, { data: blocks }] = await Promise.all([
-    supabase.from('reminders').select('*').in('user_id', userIds),
-    supabase.from('blocks').select('*').in('user_id', userIds),
+    supabase.from('reminders').select('*').in('user_id', userIdsArr),
+    supabase.from('blocks').select('*').in('user_id', userIdsArr),
   ]);
 
   // Build a completions map for today's recurring blocks (per-user timezone)
@@ -646,15 +846,48 @@ serve(async () => {
     }
   }
 
-  const subsByUser = new Map<string, typeof subs>();
-  for (const sub of subs) {
+  // Per-user channel + timezone lookups
+  const subsByUser = new Map<string, Sub[]>();
+  for (const sub of subsList) {
     const list = subsByUser.get(sub.user_id) || [];
     list.push(sub);
     subsByUser.set(sub.user_id, list);
   }
 
-  async function sendToAll(userSubs: typeof subs, payload: string): Promise<number> {
+  const tokensByUser = new Map<string, DeviceToken[]>();
+  for (const tok of tokensList) {
+    const list = tokensByUser.get(tok.user_id) || [];
+    list.push(tok);
+    tokensByUser.set(tok.user_id, list);
+  }
+
+  // Timezone preference: web sub first (existing source of truth), then
+  // native token, then UTC fallback.
+  const tzByUser = new Map<string, string>();
+  for (const sub of subsList) {
+    if (!tzByUser.has(sub.user_id)) tzByUser.set(sub.user_id, sub.timezone || 'UTC');
+  }
+  for (const tok of tokensList) {
+    if (!tzByUser.has(tok.user_id)) tzByUser.set(tok.user_id, tok.timezone || 'UTC');
+  }
+  function getTimezone(userId: string): string {
+    return tzByUser.get(userId) || 'UTC';
+  }
+
+  // Lazy-init the FCM access token — only mint if a native send actually happens.
+  // Token is valid 1h; one mint per invocation amortizes across all sends.
+  let fcmAccessToken: string | null | undefined = undefined;
+  async function getFcmAccessTokenLazy(): Promise<string | null> {
+    if (fcmAccessToken !== undefined) return fcmAccessToken;
+    fcmAccessToken = await mintFcmAccessToken();
+    return fcmAccessToken;
+  }
+
+  async function sendToAll(userId: string, payload: string): Promise<number> {
     let count = 0;
+
+    // Web Push
+    const userSubs = subsByUser.get(userId) || [];
     for (const sub of userSubs) {
       try {
         const status = await sendPush(
@@ -669,11 +902,42 @@ serve(async () => {
         // network error — skip
       }
     }
+
+    // Native (FCM)
+    const userTokens = tokensByUser.get(userId) || [];
+    if (userTokens.length > 0) {
+      const accessToken = await getFcmAccessTokenLazy();
+      if (accessToken) {
+        for (const tok of userTokens) {
+          try {
+            const result = await sendFCM(tok.token, tok.platform, payload, accessToken);
+            if (result.status >= 200 && result.status < 300) count++;
+            if (result.shouldDelete) {
+              await supabase.from('device_push_tokens')
+                .delete()
+                .eq('user_id', tok.user_id)
+                .eq('token', tok.token);
+            }
+          } catch {
+            // network error — skip
+          }
+        }
+      }
+    }
+
     return count;
   }
 
   const now = new Date();
-  const ctx: Ctx = { supabase, subsByUser, reminders: reminders || [], blocks: blocks || [], now, sendToAll };
+  const ctx: Ctx = {
+    supabase,
+    userIds: userIdSet,
+    reminders: reminders || [],
+    blocks: blocks || [],
+    now,
+    getTimezone,
+    sendToAll,
+  };
 
   const sent = (
     await handleReminders(ctx) +

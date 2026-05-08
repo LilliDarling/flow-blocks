@@ -18,7 +18,7 @@ import { renderReminders, initReminderEvents, scheduleReminders } from './routin
 import { initDeleteConfirmEvents } from './confirm-delete.js';
 import { initPWA } from './pwa.js';
 import { subscribeToPush } from './push.js';
-import { initNative } from './native.js';
+import { initNative, onNativeCalendarCallback } from './native.js';
 import { initEvents, emit, startSyncLoop, stopSyncLoop, onSyncHealthChange, getSyncHealth, SyncHealth } from './events.js';
 import { renderDayInsights, renderPatternInsights, initInsightEvents, invalidateInsightCache } from './insights.js';
 import { initQuickStart } from './quickstart.js';
@@ -369,10 +369,22 @@ function initLegalLinks(): void {
   // so the call in initUI doesn't break if we add future legal setup.
 }
 
-// Legal pages — initialized immediately so links work on auth screen too
+// Legal pages — initialized immediately so links work on auth screen too.
+// Two URL shapes are supported:
+//   - Hash-based (in-app navigation): /#privacy, /#tos
+//   - Path-based (external links, Play Console policy URLs): /privacy, /terms
+// Path-based is what Play's reviewer crawlers prefer because the page they
+// fetch immediately renders the policy without depending on hash JS handling.
 (function () {
   const privacyPage = document.getElementById('privacyPage')!;
   const tosPage = document.getElementById('tosPage')!;
+
+  function pageForPath(): HTMLElement | null {
+    const p = location.pathname;
+    if (p === '/privacy' || p.startsWith('/privacy/')) return privacyPage;
+    if (p === '/terms' || p === '/tos' || p.startsWith('/terms/') || p.startsWith('/tos/')) return tosPage;
+    return null;
+  }
 
   function showLegal(page: HTMLElement, hash: string): void {
     page.style.display = 'block';
@@ -402,6 +414,18 @@ function initLegalLinks(): void {
   document.getElementById('tosBack')!.addEventListener('click', () => hideLegal(tosPage));
 
   window.addEventListener('hashchange', handleHash);
+
+  // On boot, if a legal pathname was used (e.g. /privacy#account-deletion),
+  // render the matching page. The browser handles anchor scrolling natively
+  // once the section is visible in the DOM.
+  const initialPathPage = pageForPath();
+  if (initialPathPage) {
+    initialPathPage.style.display = 'block';
+    if (location.hash) {
+      const target = document.getElementById(location.hash.slice(1));
+      if (target) setTimeout(() => target.scrollIntoView(), 0);
+    }
+  }
 
   // Show legal page if URL already has the hash on load
   handleHash();
@@ -590,6 +614,13 @@ document.addEventListener('DOMContentLoaded', () => {
   initNative();
   initPWA();
   initAuth();
+
+  // Native calendar OAuth: when a `wildbloom://auth/<provider>-callback` URL
+  // is delivered to the deep-link listener, route it into state so the new
+  // connection lands in the UI the same way the web flow does.
+  onNativeCalendarCallback(async (url) => {
+    await state.applyNativeCalendarCallback(url);
+  });
 
   onAuth(async (userId) => {
     if (userId) {

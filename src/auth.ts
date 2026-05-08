@@ -10,7 +10,6 @@ const NATIVE_OAUTH_REDIRECT = 'wildbloom://auth/callback';
 type AuthCallback = (userId: string | null) => void;
 
 let onAuthChange: AuthCallback = () => {};
-let initialResolved = false;
 let lastNotifiedUserId: string | null | undefined = undefined;
 
 export function onAuth(callback: AuthCallback): void {
@@ -37,6 +36,17 @@ export function showAuth(): void {
   hideSplash();
   $id('authScreen').style.display = 'flex';
   $id('appScreen').style.display = 'none';
+
+  // After a successful account deletion the app reloads to /?deleted=1 — show
+  // a confirmation in the auth feedback area, then clean the URL so a refresh
+  // doesn't keep the message around.
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('deleted') === '1') {
+    showSuccess('Your account has been deleted.');
+    const url = new URL(window.location.href);
+    url.searchParams.delete('deleted');
+    history.replaceState({}, '', url.pathname + (url.search || ''));
+  }
 }
 
 /** Call this after data is loaded to reveal the app screen. */
@@ -203,7 +213,7 @@ async function handleMagicLink(): Promise<void> {
     email,
     options: {
       shouldCreateUser: false,
-      emailRedirectTo: `${window.location.origin}/`,
+      emailRedirectTo: isNative ? NATIVE_OAUTH_REDIRECT : `${window.location.origin}/`,
     },
   });
 
@@ -273,7 +283,7 @@ async function handleResendConfirmation(): Promise<void> {
     type: 'signup',
     email,
     options: {
-      emailRedirectTo: `${window.location.origin}/`,
+      emailRedirectTo: isNative ? NATIVE_OAUTH_REDIRECT : `${window.location.origin}/`,
     },
   });
 
@@ -312,26 +322,6 @@ function showProfileFeedback(msg: string, kind: 'success' | 'error'): void {
   el.dataset.kind = kind;
 }
 
-async function handleProfileCopyDeleteEmail(): Promise<void> {
-  const email = $id('profileDeleteEmail').textContent ?? '';
-  const btn = $id('profileDeleteCopyBtn') as HTMLButtonElement;
-  const original = btn.textContent ?? 'Copy';
-
-  try {
-    await navigator.clipboard.writeText(email);
-    btn.textContent = 'Copied';
-  } catch {
-    btn.textContent = 'Press Ctrl+C';
-    const range = document.createRange();
-    range.selectNodeContents($id('profileDeleteEmail'));
-    const sel = window.getSelection();
-    sel?.removeAllRanges();
-    sel?.addRange(range);
-  }
-
-  setTimeout(() => { btn.textContent = original; }, 1600);
-}
-
 async function handleProfileResetPassword(): Promise<void> {
   const btn = $id('profileResetBtn') as HTMLButtonElement;
   const { data: { user } } = await supabase.auth.getUser();
@@ -346,7 +336,7 @@ async function handleProfileResetPassword(): Promise<void> {
   btn.textContent = 'Sending…';
 
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/`,
+    redirectTo: isNative ? NATIVE_OAUTH_REDIRECT : `${window.location.origin}/`,
   });
 
   btn.disabled = false;
@@ -359,29 +349,131 @@ async function handleProfileResetPassword(): Promise<void> {
   }
 }
 
-async function handleSignOut(): Promise<void> {
-  // Server-side cleanup must happen BEFORE signOut() — RLS rejects DELETEs
-  // once the session is gone. Without this, the previous user's
-  // push_subscriptions row keeps this browser's endpoint, so the server keeps
-  // pushing their reminders here even after the next user signs in.
-  const { data: { user } } = await supabase.auth.getUser();
-  if (user) {
-    await unsubscribeFromPush(user.id);
+/** Wipe everything tied to the current user: server-side push registration,
+ *  any OS-scheduled notifications, the IDB event queue, per-user
+ *  localStorage, and sessionStorage. Used by both sign-out and account
+ *  deletion. Must run while the JWT is still valid — RLS rejects
+ *  push-subscription DELETEs once the session is gone. */
+async function clearLocalUserData(userId: string | null): Promise<void> {
+  if (userId) {
+    await unsubscribeFromPush(userId);
   }
 
-  // Local stores that hold user data — clear before reload so a different
-  // user signing in next doesn't see leftover events or per-user prefs.
+  // Native-only: WebView reload doesn't touch native plugin state. Without
+  // this, OS-scheduled notifications from the previous user's session can
+  // fire for whoever signs in next, leaking task names and reminder content.
+  if (isNative) {
+    try {
+      const { LocalNotifications } = await import('@capacitor/local-notifications');
+      const { notifications } = await LocalNotifications.getPending();
+      if (notifications.length > 0) {
+        await LocalNotifications.cancel({ notifications });
+      }
+    } catch (err) {
+      console.warn('[cleanup] LocalNotifications cleanup failed:', err);
+    }
+
+    try {
+      const { Browser } = await import('@capacitor/browser');
+      await Browser.close();
+    } catch {
+      /* not open / plugin missing */
+    }
+  }
+
   await clearEventQueue();
   for (let i = localStorage.length - 1; i >= 0; i--) {
     const k = localStorage.key(i);
     if (k && k.startsWith('hidden_cal_')) localStorage.removeItem(k);
   }
   sessionStorage.clear();
+}
+
+async function handleSignOut(): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  await clearLocalUserData(user?.id ?? null);
 
   await supabase.auth.signOut();
 
   // Hard reload kills in-memory state and pending reminder setTimeouts.
   window.location.reload();
+}
+
+// --- Account deletion ---
+
+function showDeleteConfirm(email: string): void {
+  $id('profileDeleteIntro').style.display = 'none';
+  $id('profileDeleteEmailHint').textContent = email;
+  $id('profileDeleteConfirm').style.display = 'block';
+  const input = $id('profileDeleteConfirmInput') as HTMLInputElement;
+  input.value = '';
+  (input as HTMLInputElement).disabled = false;
+  ($id('profileDeleteFinalBtn') as HTMLButtonElement).disabled = true;
+  setTimeout(() => input.focus(), 50);
+}
+
+function hideDeleteConfirm(): void {
+  $id('profileDeleteConfirm').style.display = 'none';
+  $id('profileDeleteIntro').style.display = '';
+  ($id('profileDeleteConfirmInput') as HTMLInputElement).value = '';
+}
+
+function updateDeleteFinalEnabled(): void {
+  const input = $id('profileDeleteConfirmInput') as HTMLInputElement;
+  const expected = ($id('profileDeleteEmailHint').textContent || '').trim().toLowerCase();
+  const typed = input.value.trim().toLowerCase();
+  ($id('profileDeleteFinalBtn') as HTMLButtonElement).disabled = !expected || typed !== expected;
+}
+
+async function handleDeleteAccount(): Promise<void> {
+  const finalBtn = $id('profileDeleteFinalBtn') as HTMLButtonElement;
+  const cancelBtn = $id('profileDeleteCancelBtn') as HTMLButtonElement;
+  const input = $id('profileDeleteConfirmInput') as HTMLInputElement;
+
+  // Capture user before deletion — we need user.id for cleanup AND we need
+  // the JWT to still be valid when the Edge Function reads auth.uid().
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    showProfileFeedback('You appear to be signed out. Refresh and try again.', 'error');
+    return;
+  }
+
+  finalBtn.disabled = true;
+  finalBtn.textContent = 'Deleting…';
+  cancelBtn.disabled = true;
+  input.disabled = true;
+
+  // Edge Function runs first — it explicitly deletes from every user-data
+  // table and then calls auth.admin.deleteUser. If it fails, we leave the
+  // user signed in with their data intact so they can retry.
+  const { data, error } = await supabase.functions.invoke('delete-account', {
+    method: 'POST',
+  });
+
+  const ok = !error && (data as { ok?: boolean })?.ok === true;
+  if (!ok) {
+    console.error('[delete-account] failed:', error || data);
+    showProfileFeedback(
+      'We couldn\'t delete your account just now. Please try again, or email lillith@valkyrieremedy.com if it keeps failing.',
+      'error',
+    );
+    finalBtn.disabled = false;
+    finalBtn.textContent = 'Permanently delete';
+    cancelBtn.disabled = false;
+    input.disabled = false;
+    return;
+  }
+
+  // Server is clean. Wipe the same client-side state that sign-out clears.
+  // The JWT we used above is now invalid — push DELETEs will hit zero rows
+  // (the Edge Function already cascade-cleared them) but the browser-side
+  // unsubscribe + listener cleanup still need to run.
+  await clearLocalUserData(user.id);
+  await supabase.auth.signOut();
+
+  // Replace (don't push) so the back button doesn't return to the deleted-
+  // account view. ?deleted=1 triggers the confirmation message in showAuth.
+  window.location.replace(window.location.pathname + '?deleted=1');
 }
 
 // --- Init ---
@@ -400,10 +492,24 @@ export function initAuth(): void {
   $id('profileBtn').addEventListener('click', showProfileModal);
   $id('profileCloseBtn').addEventListener('click', hideProfileModal);
   $id('profileResetBtn').addEventListener('click', handleProfileResetPassword);
-  $id('profileDeleteCopyBtn').addEventListener('click', handleProfileCopyDeleteEmail);
   $id('profileModal').addEventListener('click', (e) => {
     if ((e.target as HTMLElement).id === 'profileModal') hideProfileModal();
   });
+
+  // Account deletion: button → confirm step → final destructive action
+  $id('profileDeleteBtn').addEventListener('click', async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.email) showDeleteConfirm(user.email);
+  });
+  $id('profileDeleteCancelBtn').addEventListener('click', hideDeleteConfirm);
+  $id('profileDeleteConfirmInput').addEventListener('input', updateDeleteFinalEnabled);
+  $id('profileDeleteConfirmInput').addEventListener('keydown', (e) => {
+    if ((e as KeyboardEvent).key === 'Enter'
+        && !($id('profileDeleteFinalBtn') as HTMLButtonElement).disabled) {
+      handleDeleteAccount();
+    }
+  });
+  $id('profileDeleteFinalBtn').addEventListener('click', handleDeleteAccount);
 
   // Password recovery modal wiring
   $id('passwordRecoverySave').addEventListener('click', handlePasswordRecoverySave);
@@ -442,7 +548,6 @@ export function initAuth(): void {
 
   // Check initial session — the splash screen stays visible until this resolves
   supabase.auth.getSession().then(({ data: { session } }) => {
-    initialResolved = true;
     if (session?.user) {
       // Don't showApp yet — onUserSignedIn will call showApp after data loads
       notifyAuth(session.user.id);

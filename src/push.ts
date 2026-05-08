@@ -66,11 +66,19 @@ async function subscribeToPushWeb(userId: string): Promise<void> {
   }
 }
 
-/** Tear down this browser's push subscription and remove its server row, so a
+/** Tear down this device's push registration and remove its server row, so a
  * different user signing in later doesn't keep receiving the previous user's
  * reminders. Must run before supabase.auth.signOut() — once the session is
  * gone, the DELETE will be rejected by RLS. */
 export async function unsubscribeFromPush(userId: string): Promise<void> {
+  if (isNative) {
+    await unsubscribeFromPushNative(userId);
+    return;
+  }
+  await unsubscribeFromPushWeb(userId);
+}
+
+async function unsubscribeFromPushWeb(userId: string): Promise<void> {
   try {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
     const reg = await navigator.serviceWorker.ready;
@@ -85,7 +93,51 @@ export async function unsubscribeFromPush(userId: string): Promise<void> {
 
     await subscription.unsubscribe();
   } catch (err) {
-    console.warn('[push] unsubscribe failed:', err);
+    console.warn('[push] web unsubscribe failed:', err);
+  }
+}
+
+async function unsubscribeFromPushNative(userId: string): Promise<void> {
+  try {
+    const { PushNotifications } = await import('@capacitor/push-notifications');
+
+    // Re-resolve the current device token so we can delete the exact row that
+    // subscribeToPushNative wrote. register() is idempotent — the OS hands
+    // back the same token. 5s ceiling so a slow registration can't stall
+    // sign-out indefinitely.
+    //
+    // Track listener handles so we can remove them after — Capacitor's
+    // addListener accumulates native-side and isn't cleared by WebView
+    // reload, so without this each subscribe/unsubscribe cycle leaks two.
+    const listenerHandles: Array<Promise<{ remove: () => Promise<void> }>> = [];
+    let token: string | null;
+    try {
+      token = await new Promise<string | null>((resolve) => {
+        let settled = false;
+        const finish = (value: string | null) => {
+          if (settled) return;
+          settled = true;
+          resolve(value);
+        };
+        listenerHandles.push(PushNotifications.addListener('registration', (t) => finish(t.value)));
+        listenerHandles.push(PushNotifications.addListener('registrationError', () => finish(null)));
+        PushNotifications.register();
+        setTimeout(() => finish(null), 5000);
+      });
+    } finally {
+      const resolved = await Promise.all(listenerHandles);
+      await Promise.all(resolved.map(h => h.remove().catch(() => { /* ignore */ })));
+    }
+
+    if (!token) return;
+
+    await supabase
+      .from('device_push_tokens')
+      .delete()
+      .eq('user_id', userId)
+      .eq('token', token);
+  } catch (err) {
+    console.warn('[push] native unsubscribe failed:', err);
   }
 }
 
@@ -104,21 +156,31 @@ async function subscribeToPushNative(userId: string): Promise<void> {
     if (!granted) { console.warn('[push] native permission denied'); return; }
 
     // Resolve the device token — APNs on iOS, FCM on Android.
-    const token = await new Promise<string | null>((resolve) => {
-      let settled = false;
-      const finish = (value: string | null) => {
-        if (settled) return;
-        settled = true;
-        resolve(value);
-      };
-      PushNotifications.addListener('registration', (t) => finish(t.value));
-      PushNotifications.addListener('registrationError', (err) => {
-        console.warn('[push] native registration error:', err);
-        finish(null);
+    // Listener handles are tracked so we can remove them after — addListener
+    // accumulates native-side across calls and isn't cleared by WebView
+    // reload, so without this every sign-in/out cycle leaks two listeners.
+    const listenerHandles: Array<Promise<{ remove: () => Promise<void> }>> = [];
+    let token: string | null;
+    try {
+      token = await new Promise<string | null>((resolve) => {
+        let settled = false;
+        const finish = (value: string | null) => {
+          if (settled) return;
+          settled = true;
+          resolve(value);
+        };
+        listenerHandles.push(PushNotifications.addListener('registration', (t) => finish(t.value)));
+        listenerHandles.push(PushNotifications.addListener('registrationError', (err) => {
+          console.warn('[push] native registration error:', err);
+          finish(null);
+        }));
+        PushNotifications.register();
+        setTimeout(() => finish(null), 10000);
       });
-      PushNotifications.register();
-      setTimeout(() => finish(null), 10000);
-    });
+    } finally {
+      const resolved = await Promise.all(listenerHandles);
+      await Promise.all(resolved.map(h => h.remove().catch(() => { /* ignore */ })));
+    }
 
     if (!token) return;
 

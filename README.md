@@ -70,7 +70,8 @@ Each detector enforces a `MIN_EVIDENCE` threshold (3 data points) before surfaci
 - **Frontend:** TypeScript, Vite, Tailwind CSS v4, vanilla DOM (no framework)
 - **Backend:** Supabase (Postgres with row-level security, Auth, Edge Functions)
 - **Offline-first sync:** IndexedDB queue → Supabase
-- **PWA:** installable, with service worker, push notifications, and update prompts
+- **PWA:** installable, with service worker, Web Push notifications, and update prompts
+- **Mobile:** Android + iOS via Capacitor. Native push (FCM / APNs), OS-level local notifications, deep-linked OAuth. Same TypeScript codebase ships to web and native; platform branches sit behind an `isNative` flag. See [docs/MOBILE.md](docs/MOBILE.md).
 - **Calendar integration:** Google Calendar (read-only OAuth)
 
 ## Project layout
@@ -83,11 +84,17 @@ src/
   insights.ts     — the heuristic engine
   pomodoro.ts     — focus timer
   energy.ts       — energy logging + analytics
-  routines.ts     — recurring blocks
+  routines.ts     — recurring reminders
+  native.ts       — Capacitor boot: deep links, status bar, splash
+  push.ts         — Web Push (PWA) + native push (FCM/APNs) registration
   calendar/       — Google Calendar sync
   ...
 supabase/         — schema, migrations, edge functions
-docs/             — architecture and retention notes
+android/          — Capacitor-generated Android project
+capacitor.config.ts — Capacitor configuration
+docs/
+  DATA_RETENTION.md — database schema, retention, edge functions, secrets
+  MOBILE.md         — Capacitor build, native push, store submission metadata
 ```
 
 ## Running locally
@@ -104,6 +111,10 @@ You'll need a Supabase project with the schema in [supabase/](supabase/) applied
 Wildbloom keeps data only as long as it's useful. Recurring blocks and reminders persist with your account; one-off blocks and daily completions are auto-removed after 7 days; energy logs, done-list items, and pomodoro sessions after 30 days; the raw event log after 60 days (long enough for weekly patterns to confirm). Learned edges in `knowledge_edges` persist separately so insights don't reset when raw events expire.
 
 All data is protected by row-level security. No analytics, no tracking cookies, no cross-user model training. See [docs/DATA_RETENTION.md](docs/DATA_RETENTION.md) for the full schedule.
+
+### Account deletion
+
+Wildbloom honors Google Play (since 2024) and Apple App Store account-deletion requirements. From the profile menu, users can permanently delete their account and all associated data — blocks, reminders, energy logs, calendar connections, push registrations. Deletion runs through the `delete-account` edge function, which explicitly sweeps every user-data table and then calls `auth.admin.deleteUser`. The flow is invoke → cleanup → reload to a confirmation screen. See [docs/DATA_RETENTION.md#account-deletion](docs/DATA_RETENTION.md#account-deletion) for the full table list and deletion mechanics.
 
 ## License
 

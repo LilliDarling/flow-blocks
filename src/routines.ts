@@ -2,6 +2,7 @@ import { state } from './state.js';
 import { DAYS, Reminder, ReminderTimeSuggestion, fmtTime, parseTime, getTodayIndex, getTodayDate, $id, esc } from './utils.js';
 import { confirmDelete } from './confirm-delete.js';
 import { requestNotificationPermission, subscribeToPush } from './push.js';
+import { isNative } from './native.js';
 
 const DEFAULT_ICON = '💊';
 
@@ -98,15 +99,62 @@ export function scheduleReminders(fireMissed = false): void {
   }
 }
 
-function showReminderNotification(reminder: Reminder): void {
+async function showReminderNotification(reminder: Reminder): Promise<void> {
+  const title = `${reminder.icon || '💊'} ${reminder.name}`;
+  const body = `Gentle reminder — it's ${fmtTime(reminder.time)}`;
+
+  if (isNative) {
+    // Capacitor's WebView technically supports `new Notification()`, but it
+    // shows only inside the WebView — not as a real OS notification. Use
+    // LocalNotifications so it surfaces in the system tray. Server-side FCM
+    // (send-push-notifications fn) handles the backgrounded-app case; this
+    // path covers the foreground case where the in-app setTimeout fires.
+    try {
+      const { LocalNotifications } = await import('@capacitor/local-notifications');
+      const perm = await LocalNotifications.checkPermissions();
+      if (perm.display !== 'granted') {
+        const req = await LocalNotifications.requestPermissions();
+        if (req.display !== 'granted') return;
+      }
+      // LocalNotifications requires a numeric id and a future timestamp.
+      // Hash the reminder UUID into a stable int so concurrent reminders
+      // don't overwrite each other; schedule ~500ms ahead to satisfy the
+      // future-time constraint. Unsynced reminders (no id yet) get hashed
+      // off name+time as a fallback.
+      const idSource = reminder.id || `${reminder.name}|${reminder.time}`;
+      await LocalNotifications.schedule({
+        notifications: [{
+          id: hashReminderId(idSource),
+          title,
+          body,
+          schedule: { at: new Date(Date.now() + 500) },
+          smallIcon: 'ic_stat_icon',
+        }],
+      });
+    } catch (err) {
+      console.warn('[routines] native reminder notification failed:', err);
+    }
+    return;
+  }
+
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
 
-  const n = new Notification(`${reminder.icon || '💊'} ${reminder.name}`, {
-    body: `Gentle reminder — it's ${fmtTime(reminder.time)}`,
+  const n = new Notification(title, {
+    body,
     icon: '/icons/icon.png',
     tag: `reminder-${reminder.id}`,
   });
   setTimeout(() => n.close(), 15000);
+}
+
+/** Stable 32-bit hash of a reminder's UUID for use as a LocalNotifications id. */
+function hashReminderId(id: string): number {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = ((hash << 5) - hash) + id.charCodeAt(i);
+    hash |= 0; // force int32
+  }
+  return Math.abs(hash);
 }
 
 function openReminderModal(index = -1): void {
@@ -395,10 +443,30 @@ function renderManageList(): void {
   ).join('');
 }
 
-function updateNotifBanner(): void {
+async function updateNotifBanner(): Promise<void> {
   const banner = $id('notifOptIn');
-  const show = 'Notification' in window
-    && Notification.permission === 'default'
-    && !sessionStorage.getItem('notif_dismissed');
-  banner.style.display = show ? 'flex' : 'none';
+
+  // Honor the user's earlier dismiss regardless of platform.
+  if (sessionStorage.getItem('notif_dismissed')) {
+    banner.style.display = 'none';
+    return;
+  }
+
+  let needsPrompt: boolean;
+  if (isNative) {
+    // The Web Notification permission state in a Capacitor WebView is
+    // independent of the OS-level push permission, so it would mislead the
+    // banner. Ask the PushNotifications plugin for the actual OS state.
+    try {
+      const { PushNotifications } = await import('@capacitor/push-notifications');
+      const status = await PushNotifications.checkPermissions();
+      needsPrompt = status.receive === 'prompt' || status.receive === 'prompt-with-rationale';
+    } catch {
+      needsPrompt = false;
+    }
+  } else {
+    needsPrompt = 'Notification' in window && Notification.permission === 'default';
+  }
+
+  banner.style.display = needsPrompt ? 'flex' : 'none';
 }

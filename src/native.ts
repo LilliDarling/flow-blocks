@@ -4,6 +4,15 @@ import { supabase } from './supabase.js';
 export const isNative: boolean = Capacitor.isNativePlatform();
 export const nativePlatform: string = Capacitor.getPlatform(); // 'ios' | 'android' | 'web'
 
+// Callback registration for non-Supabase deep links (e.g. calendar OAuth).
+// Inversion-of-control to avoid a native.ts → state.ts → calendar → native.ts
+// import cycle. app.ts wires this up after state is constructed.
+type NativeCalendarCallback = (url: string) => void | Promise<void>;
+let onNativeCalendarCb: NativeCalendarCallback | null = null;
+export function onNativeCalendarCallback(fn: NativeCalendarCallback): void {
+  onNativeCalendarCb = fn;
+}
+
 /**
  * Initialise native-only listeners and chrome.
  *
@@ -33,14 +42,37 @@ async function setupStatusBar(): Promise<void> {
   }
 }
 
-/** Listen for `wildbloom://auth/...` redirects from external OAuth flows. */
+/** Listen for `wildbloom://auth/...` redirects from external OAuth flows.
+ *  Two distinct callback shapes share the `/auth/` namespace:
+ *    - Supabase auth: `/auth/callback` with tokens in the URL fragment.
+ *    - Calendar OAuth: `/auth/<provider>-callback` with `code` + `state` in
+ *      the query string. Routed to whatever was registered via
+ *      onNativeCalendarCallback().
+ */
 async function setupDeepLinks(): Promise<void> {
   const { App } = await import('@capacitor/app');
   App.addListener('appUrlOpen', async (event) => {
     const url = event.url;
-    if (!url.includes('auth')) return;
+    if (!url.includes('/auth/')) return;
 
-    // Supabase returns tokens in the URL fragment after OAuth.
+    // Calendar OAuth (provider-callback path with query-string code).
+    // Path examples: /auth/google-callback, /auth/notion-callback (future).
+    if (/\/auth\/[\w-]+-callback(\?|$)/.test(url)) {
+      try {
+        if (onNativeCalendarCb) await onNativeCalendarCb(url);
+      } catch (err) {
+        console.error('[native] calendar callback handler threw:', err);
+      }
+      try {
+        const { Browser } = await import('@capacitor/browser');
+        await Browser.close();
+      } catch {
+        /* browser may already be closed */
+      }
+      return;
+    }
+
+    // Supabase auth: tokens in the URL fragment.
     const hash = url.split('#')[1];
     if (!hash) return;
 
