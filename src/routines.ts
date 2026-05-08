@@ -99,62 +99,27 @@ export function scheduleReminders(fireMissed = false): void {
   }
 }
 
-async function showReminderNotification(reminder: Reminder): Promise<void> {
-  const title = `${reminder.icon || '💊'} ${reminder.name}`;
-  const body = `Gentle reminder — it's ${fmtTime(reminder.time)}`;
-
-  if (isNative) {
-    // Capacitor's WebView technically supports `new Notification()`, but it
-    // shows only inside the WebView — not as a real OS notification. Use
-    // LocalNotifications so it surfaces in the system tray. Server-side FCM
-    // (send-push-notifications fn) handles the backgrounded-app case; this
-    // path covers the foreground case where the in-app setTimeout fires.
-    try {
-      const { LocalNotifications } = await import('@capacitor/local-notifications');
-      const perm = await LocalNotifications.checkPermissions();
-      if (perm.display !== 'granted') {
-        const req = await LocalNotifications.requestPermissions();
-        if (req.display !== 'granted') return;
-      }
-      // LocalNotifications requires a numeric id and a future timestamp.
-      // Hash the reminder UUID into a stable int so concurrent reminders
-      // don't overwrite each other; schedule ~500ms ahead to satisfy the
-      // future-time constraint. Unsynced reminders (no id yet) get hashed
-      // off name+time as a fallback.
-      const idSource = reminder.id || `${reminder.name}|${reminder.time}`;
-      await LocalNotifications.schedule({
-        notifications: [{
-          id: hashReminderId(idSource),
-          title,
-          body,
-          schedule: { at: new Date(Date.now() + 500) },
-          smallIcon: 'ic_stat_icon',
-        }],
-      });
-    } catch (err) {
-      console.warn('[routines] native reminder notification failed:', err);
-    }
-    return;
-  }
+function showReminderNotification(reminder: Reminder): void {
+  // Native: skip the in-app firing entirely. The server-side FCM push
+  // (send-push-notifications edge function) is the single source of truth
+  // for reminders on native, which avoids two failure modes:
+  //   1. Double-fire when the in-page setTimeout fires at the same minute
+  //      as the cron tick — both produce a notification.
+  //   2. Late-fire when the WebView is paused (app backgrounded) and the
+  //      setTimeout resumes when the user reopens the app, firing a "it's
+  //      8:00 AM" notification at 9:30 AM.
+  // OS-scheduled LocalNotifications (the better long-term fix) is tracked
+  // as Option B in the publish-prep notes.
+  if (isNative) return;
 
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
 
-  const n = new Notification(title, {
-    body,
+  const n = new Notification(`${reminder.icon || '💊'} ${reminder.name}`, {
+    body: `Gentle reminder — it's ${fmtTime(reminder.time)}`,
     icon: '/icons/icon.png',
     tag: `reminder-${reminder.id}`,
   });
   setTimeout(() => n.close(), 15000);
-}
-
-/** Stable 32-bit hash of a reminder's UUID for use as a LocalNotifications id. */
-function hashReminderId(id: string): number {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) {
-    hash = ((hash << 5) - hash) + id.charCodeAt(i);
-    hash |= 0; // force int32
-  }
-  return Math.abs(hash);
 }
 
 function openReminderModal(index = -1): void {
