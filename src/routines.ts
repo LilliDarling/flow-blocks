@@ -3,8 +3,23 @@ import { DAYS, Reminder, ReminderTimeSuggestion, fmtTime, parseTime, getTodayInd
 import { confirmDelete } from './confirm-delete.js';
 import { requestNotificationPermission, subscribeToPush } from './push.js';
 import { isNative } from './native.js';
+import {
+  scheduleReminderNative,
+  cancelReminderNative,
+  syncAllRemindersNative,
+  refreshReminderTodayNative,
+  refillRemindersNative,
+  hasExactAlarmPermission,
+  requestExactAlarmPermission,
+} from './native-notifications.js';
 
 const DEFAULT_ICON = '💊';
+
+/** Single source of truth for "is this reminder suppressed today" — done or
+ *  skipped both mean we shouldn't fire today. Used by native scheduling. */
+function isReminderSuppressedToday(r: Reminder): boolean {
+  return state.isReminderCompletedToday(r) || state.isReminderSkippedToday(r);
+}
 
 let editingReminderIndex = -1;
 let selectedDays: number[] = [];
@@ -100,16 +115,10 @@ export function scheduleReminders(fireMissed = false): void {
 }
 
 function showReminderNotification(reminder: Reminder): void {
-  // Native: skip the in-app firing entirely. The server-side FCM push
-  // (send-push-notifications edge function) is the single source of truth
-  // for reminders on native, which avoids two failure modes:
-  //   1. Double-fire when the in-page setTimeout fires at the same minute
-  //      as the cron tick — both produce a notification.
-  //   2. Late-fire when the WebView is paused (app backgrounded) and the
-  //      setTimeout resumes when the user reopens the app, firing a "it's
-  //      8:00 AM" notification at 9:30 AM.
-  // OS-scheduled LocalNotifications (the better long-term fix) is tracked
-  // as Option B in the publish-prep notes.
+  // Native: skip in-app firing entirely. OS-scheduled LocalNotifications are
+  // the single source of truth on native — see native-notifications.ts. The
+  // server-side FCM path is also filtered out for native users in
+  // send-push-notifications, so there's no double-fire.
   if (isNative) return;
 
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
@@ -173,8 +182,13 @@ async function saveReminder(): Promise<void> {
 
   if (editingReminderIndex >= 0) {
     await state.updateReminder(editingReminderIndex, reminder);
+    const updated = state.reminders[editingReminderIndex];
+    if (updated) await scheduleReminderNative(updated, isReminderSuppressedToday(updated));
   } else {
     await state.addReminder(reminder);
+    const created = state.reminders[state.reminders.length - 1];
+    // New reminder — never already suppressed today.
+    if (created) await scheduleReminderNative(created, false);
   }
 
   closeReminderModal();
@@ -197,8 +211,10 @@ async function deleteReminder(): Promise<void> {
     if (!state.isReminderSkippedToday(reminder)) {
       await state.toggleReminderSkip(reminder);
     }
+    await refreshReminderTodayNative(reminder, true);
   } else {
     // 'future' or 'all' — delete the reminder
+    if (reminder.id) await cancelReminderNative(reminder.id);
     await state.deleteReminder(editingReminderIndex);
   }
 
@@ -211,6 +227,7 @@ async function toggleCompletion(index: number): Promise<void> {
   const reminder = state.reminders[index];
   if (!reminder) return;
   await state.toggleReminderCompletion(reminder);
+  await refreshReminderTodayNative(reminder, isReminderSuppressedToday(reminder));
   renderReminders();
   scheduleReminders();
 }
@@ -219,6 +236,7 @@ async function skipReminder(index: number): Promise<void> {
   const reminder = state.reminders[index];
   if (!reminder) return;
   await state.toggleReminderSkip(reminder);
+  await refreshReminderTodayNative(reminder, isReminderSuppressedToday(reminder));
   renderReminders();
   scheduleReminders();
 }
@@ -298,11 +316,16 @@ export function initReminderEvents(): void {
     }
   });
 
+  // Native: ensure every loaded reminder has an OS schedule. Idempotent —
+  // re-scheduling with stable IDs replaces existing pending notifications.
+  syncAllRemindersNative(state.reminders, isReminderSuppressedToday);
+
   // Notification opt-in banner
   updateNotifBanner();
   $id('notifOptInBtn').addEventListener('click', async () => {
     const granted = await requestNotificationPermission();
     if (granted && state.userId) subscribeToPush(state.userId);
+    if (granted) syncAllRemindersNative(state.reminders, isReminderSuppressedToday);
     updateNotifBanner();
   });
   $id('notifOptInDismiss').addEventListener('click', () => {
@@ -310,10 +333,25 @@ export function initReminderEvents(): void {
     sessionStorage.setItem('notif_dismissed', '1');
   });
 
+  // Exact-alarm prompt: deep-links to Android system settings. After the
+  // user flips the toggle the OS may restart the app, which is fine — our
+  // sync runs again on init and re-schedules everything as exact alarms.
+  $id('exactAlarmOptInBtn').addEventListener('click', async () => {
+    await requestExactAlarmPermission();
+    await updateNotifBanner();
+    // Re-schedule so existing reminders pick up the new exact-alarm path.
+    if (state.userId) syncAllRemindersNative(state.reminders, isReminderSuppressedToday);
+  });
+  $id('exactAlarmOptInDismiss').addEventListener('click', () => {
+    $id('exactAlarmOptIn').style.display = 'none';
+    sessionStorage.setItem('exact_alarm_dismissed', '1');
+  });
+
   // Request notification permission on first interaction
   document.addEventListener('click', async () => {
     const granted = await requestNotificationPermission();
     if (granted && state.userId) subscribeToPush(state.userId);
+    if (granted) syncAllRemindersNative(state.reminders, isReminderSuppressedToday);
     updateNotifBanner();
   }, { once: true });
 
@@ -327,10 +365,20 @@ export function initReminderEvents(): void {
       // Day rolled over — reload completions from DB and re-render
       await state.loadReminders();
       renderReminders();
+      // Today's done/skipped state is freshly cleared — re-sync so today's
+      // slots reflect the new day instead of yesterday's suppressions.
+      syncAllRemindersNative(state.reminders, isReminderSuppressedToday);
+    } else {
+      // Same day — just top up any slots whose notification already fired
+      // while the app was killed.
+      refillRemindersNative(state.reminders, isReminderSuppressedToday);
     }
 
-    // Reschedule and fire any missed reminders
+    // Reschedule and fire any missed reminders (in-app, web only)
     scheduleReminders(true);
+
+    // Picks up exact-alarm grant if user just came back from system settings.
+    updateNotifBanner();
   });
 }
 
@@ -434,4 +482,34 @@ async function updateNotifBanner(): Promise<void> {
   }
 
   banner.style.display = needsPrompt ? 'flex' : 'none';
+
+  await updateExactAlarmBanner();
+}
+
+/** Surface a separate banner for Android's exact-alarm setting. Shown only
+ *  when notifications are already granted (otherwise the main banner is up)
+ *  and the OS exact-alarm setting is denied — that's the case where
+ *  notifications fire but Doze defers them by ~9 minutes. */
+async function updateExactAlarmBanner(): Promise<void> {
+  const banner = $id('exactAlarmOptIn');
+  if (!isNative) { banner.style.display = 'none'; return; }
+  if (sessionStorage.getItem('exact_alarm_dismissed')) {
+    banner.style.display = 'none';
+    return;
+  }
+  // Only relevant once notification permission itself is granted — otherwise
+  // the user sees the bigger "Enable notifications" banner first.
+  try {
+    const { LocalNotifications } = await import('@capacitor/local-notifications');
+    const perm = await LocalNotifications.checkPermissions();
+    if (perm.display !== 'granted') {
+      banner.style.display = 'none';
+      return;
+    }
+  } catch {
+    banner.style.display = 'none';
+    return;
+  }
+  const exact = await hasExactAlarmPermission();
+  banner.style.display = exact ? 'none' : 'flex';
 }

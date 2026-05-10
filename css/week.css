@@ -1,9 +1,26 @@
 .week-grid {
   display: grid;
-  grid-template-columns: 70px repeat(7, 1fr);
+  /* minmax(min, 1fr): days expand to share space when the viewport is wide,
+   * but never shrink below the min — when the viewport is narrow, the grid
+   * overflows and overflow-x kicks in for horizontal scroll. */
+  grid-template-columns: 70px repeat(7, minmax(140px, 1fr));
   max-width: 1100px;
   margin: 0 auto;
   overflow-x: auto;
+  /* Reduce iOS rubber-band on the horizontal axis; play nicely with vertical
+   * page scroll inside the grid (none) by allowing pan-x only. */
+  overscroll-behavior-x: contain;
+}
+
+/* Pin the time-label column (and its corner header) to the visible left edge
+ * during horizontal scroll, otherwise scrolling right hides the hours and
+ * orientation is lost. */
+.week-grid > .week-header:first-child,
+.week-times {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: var(--bg);
 }
 
 .week-header {
@@ -191,6 +208,12 @@
 }
 
 @media (max-width: 768px) {
-  .week-grid { grid-template-columns: 50px repeat(7, 1fr); font-size: 0.65rem; }
+  .week-grid {
+    /* Narrower time col + 110px-min day cols — at 375px viewport this gives
+     * ~820px of grid width, so the user pans horizontally to reach later
+     * days instead of staring at clipped 46px columns. */
+    grid-template-columns: 50px repeat(7, minmax(110px, 1fr));
+    font-size: 0.65rem;
+  }
   .week-cell-label { font-size: 0.6rem; }
 }

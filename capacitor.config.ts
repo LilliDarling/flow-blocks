@@ -18,6 +18,14 @@ const config: CapacitorConfig = {
     PushNotifications: {
       presentationOptions: ['badge', 'sound', 'alert'],
     },
+    LocalNotifications: {
+      // Status-bar (small) icon for every scheduled notification. Lives at
+      // res/drawable-{density}/ic_stat_icon.png — a white silhouette of the
+      // logo. Android tints it with iconColor; without this the system falls
+      // back to the generic info icon.
+      smallIcon: 'ic_stat_icon',
+      iconColor: '#1a1f17',
+    },
   },
 };
 

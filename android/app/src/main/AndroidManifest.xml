@@ -35,9 +35,25 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- FCM (push notification) defaults. Without these, FCM messages that
+             don't override icon/color use system defaults — which on Android
+             means a white square and untinted accent. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_icon" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification_color" />
     </application>
 
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Without SCHEDULE_EXACT_ALARM the LocalNotifications plugin falls back
+         to setAndAllowWhileIdle, which Doze batches up to ~9 minutes. User
+         must grant via system settings on Android 13+ (the plugin's
+         changeExactNotificationSetting() deep-links there). -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 </manifest>

@@ -193,9 +193,70 @@ export function renderWeek(): void {
   grid.innerHTML = html;
 }
 
+/** Cleanup callbacks for live popovers — cancels scroll/resize listeners
+ *  registered by attachPopover so they don't leak when the popover is removed. */
+const popoverCleanups = new WeakMap<HTMLElement, () => void>();
+
 function closeCalPopover(): void {
-  const existing = document.querySelector('.week-cal-popover');
-  if (existing) existing.remove();
+  const existing = document.querySelector('.week-cal-popover') as HTMLElement | null;
+  if (!existing) return;
+  const cleanup = popoverCleanups.get(existing);
+  if (cleanup) cleanup();
+  popoverCleanups.delete(existing);
+  existing.remove();
+}
+
+/** Position-and-track helper: places `pop` next to `anchor`, then keeps it
+ *  glued to the anchor as the user scrolls (the week grid scrolls
+ *  horizontally, the page scrolls vertically) or resizes the window.
+ *  Prefers placing the popover to the right of the anchor and falls back to
+ *  the left if there's no room, then clamps to the viewport so it can never
+ *  be cut off. */
+function attachPopover(pop: HTMLElement, anchor: HTMLElement): void {
+  pop.style.position = 'fixed';
+  document.body.appendChild(pop);
+
+  const reposition = (): void => {
+    const rect = anchor.getBoundingClientRect();
+    const popRect = pop.getBoundingClientRect();
+    const margin = 8;
+
+    let left = rect.right + margin;
+    if (left + popRect.width > window.innerWidth - margin) {
+      left = rect.left - popRect.width - margin;
+    }
+    left = Math.max(margin, Math.min(left, window.innerWidth - popRect.width - margin));
+
+    let top = rect.top;
+    top = Math.max(margin, Math.min(top, window.innerHeight - popRect.height - margin));
+
+    pop.style.left = `${left}px`;
+    pop.style.top = `${top}px`;
+  };
+
+  reposition();
+
+  // rAF-coalesced reposition: scroll fires at high frequency, but we only
+  // need to update once per frame. capture:true on window catches scroll
+  // events from any nested scroll container (the week grid) since scroll
+  // events don't bubble.
+  let raf = 0;
+  const schedule = (): void => {
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      raf = 0;
+      reposition();
+    });
+  };
+
+  window.addEventListener('scroll', schedule, { passive: true, capture: true });
+  window.addEventListener('resize', schedule);
+
+  popoverCleanups.set(pop, () => {
+    if (raf) cancelAnimationFrame(raf);
+    window.removeEventListener('scroll', schedule, true);
+    window.removeEventListener('resize', schedule);
+  });
 }
 
 function showDonePopover(el: HTMLElement): void {
@@ -213,20 +274,7 @@ function showDonePopover(el: HTMLElement): void {
     <div class="week-cal-popover-time">${fmtTime(time)}${durLine}</div>
     <div class="week-cal-popover-source">completed</div>`;
 
-  const rect = el.getBoundingClientRect();
-  pop.style.position = 'fixed';
-  pop.style.top = `${rect.top}px`;
-  pop.style.left = `${rect.right + 8}px`;
-
-  document.body.appendChild(pop);
-
-  const popRect = pop.getBoundingClientRect();
-  if (popRect.right > window.innerWidth - 8) {
-    pop.style.left = `${rect.left - popRect.width - 8}px`;
-  }
-  if (popRect.bottom > window.innerHeight - 8) {
-    pop.style.top = `${window.innerHeight - popRect.height - 8}px`;
-  }
+  attachPopover(pop, el);
 }
 
 function showCalPopover(el: HTMLElement): void {
@@ -244,23 +292,7 @@ function showCalPopover(el: HTMLElement): void {
     <div class="week-cal-popover-time">${fmtTime(start)} – ${fmtTime(end)} · ${duration} min</div>
     <div class="week-cal-popover-source">from ${esc(provider)} calendar</div>`;
 
-  // Position near the clicked element
-  const rect = el.getBoundingClientRect();
-  pop.style.position = 'fixed';
-  pop.style.top = `${rect.top}px`;
-  pop.style.left = `${rect.right + 8}px`;
-
-  document.body.appendChild(pop);
-
-  // If it overflows right, flip to left side
-  const popRect = pop.getBoundingClientRect();
-  if (popRect.right > window.innerWidth - 8) {
-    pop.style.left = `${rect.left - popRect.width - 8}px`;
-  }
-  // If it overflows bottom, shift up
-  if (popRect.bottom > window.innerHeight - 8) {
-    pop.style.top = `${window.innerHeight - popRect.height - 8}px`;
-  }
+  attachPopover(pop, el);
 }
 
 export function initWeekEvents(): void {

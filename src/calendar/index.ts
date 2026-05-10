@@ -184,8 +184,12 @@ export async function processNativeCallbackUrl(
   const code = parsed.searchParams.get('code');
   const state = parsed.searchParams.get('state');
 
-  // Path is e.g. `/auth/google-callback` — extract the provider segment.
-  const match = parsed.pathname.match(/\/auth\/([\w-]+)-callback/);
+  // Match against the raw URL: for custom-scheme URLs the WHATWG URL parser
+  // treats `auth` as the host (not part of the path), so `parsed.pathname`
+  // is just `/<provider>-callback` — matching `/auth/<provider>-callback`
+  // against the parsed path silently fails. The raw URL form is robust to
+  // that and matches what the deep-link handler in native.ts already tests.
+  const match = url.match(/\/auth\/([\w-]+)-callback/);
   if (!code || !match) return null;
   const provider = match[1];
 

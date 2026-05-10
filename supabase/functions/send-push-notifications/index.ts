@@ -26,6 +26,12 @@ type BlockRow = any;
 // deno-lint-ignore no-explicit-any
 type ReminderRow = any;
 
+interface SendOpts {
+  /** Skip native (FCM) delivery. Used by reminders, where native devices fire
+   *  OS-scheduled LocalNotifications client-side and would otherwise double-fire. */
+  webOnly?: boolean;
+}
+
 interface Ctx {
   supabase: SupabaseClient;
   userIds: Set<string>;
@@ -33,7 +39,7 @@ interface Ctx {
   blocks: BlockRow[];
   now: Date;
   getTimezone: (userId: string) => string;
-  sendToAll: (userId: string, payload: string) => Promise<number>;
+  sendToAll: (userId: string, payload: string, opts?: SendOpts) => Promise<number>;
 }
 
 // ── Base64url helpers ───────────────────────────────────────────────
@@ -430,7 +436,9 @@ async function handleReminders(ctx: Ctx): Promise<number> {
         tag: `reminder-${reminder.id}`,
         url: '/',
       });
-      sent += await ctx.sendToAll(userId, payload);
+      // webOnly: native clients fire their own OS-scheduled LocalNotifications
+      // for reminders. Server FCM would double-fire on the device.
+      sent += await ctx.sendToAll(userId, payload, { webOnly: true });
     }
   }
   return sent;
@@ -883,7 +891,7 @@ serve(async (req) => {
     return fcmAccessToken;
   }
 
-  async function sendToAll(userId: string, payload: string): Promise<number> {
+  async function sendToAll(userId: string, payload: string, opts: SendOpts = {}): Promise<number> {
     let count = 0;
 
     // Web Push
@@ -903,7 +911,11 @@ serve(async (req) => {
       }
     }
 
-    // Native (FCM)
+    // Native (FCM). Skipped for reminders — native clients schedule their
+    // own OS-level LocalNotifications, so server-side FCM here would
+    // double-fire on the device.
+    if (opts.webOnly) return count;
+
     const userTokens = tokensByUser.get(userId) || [];
     if (userTokens.length > 0) {
       const accessToken = await getFcmAccessTokenLazy();

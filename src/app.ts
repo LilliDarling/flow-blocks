@@ -11,7 +11,7 @@ import { renderEnergyAnalytics } from './energy.js';
 import { openModal, initModalEvents } from './modal.js';
 import { initPomodoro } from './pomodoro.js';
 import { initAuth, onAuth, showApp } from './auth.js';
-import { initCalendarUI } from './calendar/ui.js';
+import { initCalendarUI, renderCalendarPanel } from './calendar/ui.js';
 import { showCalendarSyncDialog } from './calendar/sync.js';
 import { initDragAndDrop } from './drag.js';
 import { renderReminders, initReminderEvents, scheduleReminders } from './routines.js';
@@ -617,9 +617,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Native calendar OAuth: when a `wildbloom://auth/<provider>-callback` URL
   // is delivered to the deep-link listener, route it into state so the new
-  // connection lands in the UI the same way the web flow does.
+  // connection lands in the UI the same way the web flow does. The web flow
+  // re-renders implicitly on post-callback sign-in; native arrives while the
+  // UI is already mounted, so we need to repaint the panel + timeline.
   onNativeCalendarCallback(async (url) => {
-    await state.applyNativeCalendarCallback(url);
+    const ok = await state.applyNativeCalendarCallback(url);
+    if (ok) {
+      renderCalendarPanel();
+      renderTimeline();
+    }
   });
 
   onAuth(async (userId) => {

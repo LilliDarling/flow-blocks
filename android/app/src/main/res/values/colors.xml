@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tint applied to the white silhouette in ic_stat_icon when shown
+         in the status bar / notification. Matches the app's brand accent. -->
+    <color name="notification_color">#1e8040</color>
+</resources>
