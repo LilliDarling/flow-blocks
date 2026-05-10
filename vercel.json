@@ -1,4 +1,11 @@
 {
+  "redirects": [
+    {
+      "source": "/auth/google/native-bridge",
+      "destination": "wildbloom://auth/google-callback",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     { "source": "/(.*)", "destination": "/" }
   ],

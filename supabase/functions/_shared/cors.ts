@@ -13,12 +13,26 @@ const DEFAULT_ORIGINS = [
   'http://127.0.0.1:5173',
 ];
 
+/** Always allowed — these origins are exclusive to native Capacitor apps. A
+ *  regular browser refuses to set them as the Origin header for cross-site
+ *  requests, so they can't be claimed by a malicious web page. The JWT auth
+ *  check in each function is the real security boundary; the CORS allowlist
+ *  just lets the preflight succeed so the actual call goes through.
+ *    capacitor://localhost — iOS Capacitor WebView
+ *    https://localhost     — Android Capacitor when androidScheme: 'https'
+ *    http://localhost      — Android Capacitor when androidScheme: 'http' */
+const NATIVE_ORIGINS = [
+  'capacitor://localhost',
+  'https://localhost',
+  'http://localhost',
+];
+
 function getAllowedOrigins(): string[] {
   const env = Deno.env.get('ALLOWED_ORIGINS');
-  if (env) {
-    return env.split(',').map((o) => o.trim()).filter(Boolean);
-  }
-  return DEFAULT_ORIGINS;
+  const fromEnv = env
+    ? env.split(',').map((o) => o.trim()).filter(Boolean)
+    : DEFAULT_ORIGINS;
+  return [...fromEnv, ...NATIVE_ORIGINS];
 }
 
 /** Check whether the request's Origin header is allowed. */
