@@ -9,6 +9,9 @@ import {
   syncAllRemindersNative,
   refreshReminderTodayNative,
   refillRemindersNative,
+  syncAllBlocksNative,
+  refillBlockNotifsNative,
+  syncSummariesNative,
   hasExactAlarmPermission,
   requestExactAlarmPermission,
 } from './native-notifications.js';
@@ -116,9 +119,7 @@ export function scheduleReminders(fireMissed = false): void {
 
 function showReminderNotification(reminder: Reminder): void {
   // Native: skip in-app firing entirely. OS-scheduled LocalNotifications are
-  // the single source of truth on native — see native-notifications.ts. The
-  // server-side FCM path is also filtered out for native users in
-  // send-push-notifications, so there's no double-fire.
+  // the single source of truth on native — see native-notifications.ts.
   if (isNative) return;
 
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
@@ -368,11 +369,19 @@ export function initReminderEvents(): void {
       // Today's done/skipped state is freshly cleared — re-sync so today's
       // slots reflect the new day instead of yesterday's suppressions.
       syncAllRemindersNative(state.reminders, isReminderSuppressedToday);
+      // Block + summary slots also need full re-sync — today's per-block
+      // suppression and the summary-condition snapshots are now stale.
+      syncAllBlocksNative(state.blocks, (b) => state.isBlockSuppressedToday(b));
     } else {
       // Same day — just top up any slots whose notification already fired
       // while the app was killed.
       refillRemindersNative(state.reminders, isReminderSuppressedToday);
+      refillBlockNotifsNative(state.blocks, (b) => state.isBlockSuppressedToday(b));
     }
+
+    // Summaries always re-arm on resume so condition-based cancellations
+    // (recent energy log, completed blocks) reflect current state.
+    syncSummariesNative(state.notifSnapshot());
 
     // Reschedule and fire any missed reminders (in-app, web only)
     scheduleReminders(true);
@@ -468,12 +477,13 @@ async function updateNotifBanner(): Promise<void> {
   let needsPrompt: boolean;
   if (isNative) {
     // The Web Notification permission state in a Capacitor WebView is
-    // independent of the OS-level push permission, so it would mislead the
-    // banner. Ask the PushNotifications plugin for the actual OS state.
+    // independent of the OS-level notification permission, so it would
+    // mislead the banner. Ask LocalNotifications for the actual OS state —
+    // it shares POST_NOTIFICATIONS (Android 13+) with any other notification API.
     try {
-      const { PushNotifications } = await import('@capacitor/push-notifications');
-      const status = await PushNotifications.checkPermissions();
-      needsPrompt = status.receive === 'prompt' || status.receive === 'prompt-with-rationale';
+      const { LocalNotifications } = await import('@capacitor/local-notifications');
+      const status = await LocalNotifications.checkPermissions();
+      needsPrompt = status.display === 'prompt' || status.display === 'prompt-with-rationale';
     } catch {
       needsPrompt = false;
     }

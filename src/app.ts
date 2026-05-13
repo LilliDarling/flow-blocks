@@ -19,6 +19,7 @@ import { initDeleteConfirmEvents } from './confirm-delete.js';
 import { initPWA } from './pwa.js';
 import { subscribeToPush } from './push.js';
 import { initNative, onNativeCalendarCallback } from './native.js';
+import { syncAllBlocksNative, refillBlockNotifsNative, syncSummariesNative } from './native-notifications.js';
 import { initEvents, emit, startSyncLoop, stopSyncLoop, onSyncHealthChange, getSyncHealth, SyncHealth } from './events.js';
 import { renderDayInsights, renderPatternInsights, initInsightEvents, invalidateInsightCache } from './insights.js';
 import { initQuickStart } from './quickstart.js';
@@ -515,6 +516,12 @@ async function onUserSignedIn(userId: string): Promise<void> {
 
   // Data is loaded — now reveal the app (hides splash)
   showApp();
+
+  // Native: schedule OS-level alarms for every block + summary singleton.
+  // Idempotent — same IDs replace prior pending notifications. On web this
+  // is a no-op; web notifications come from Web Push via the Edge Function.
+  syncAllBlocksNative(state.blocks, (b) => state.isBlockSuppressedToday(b));
+  syncSummariesNative(state.notifSnapshot());
 
   // Register push subscription (fire-and-forget)
   subscribeToPush(userId);

@@ -15,6 +15,10 @@ import {
   loadConnections, fetchAllEvents, disconnectCalendar, checkOAuthRedirect,
   processNativeCallbackUrl,
 } from './calendar/index.js';
+import {
+  scheduleBlockNotifsNative, cancelBlockNotifsNative,
+  refreshBlockTodayNative, syncSummariesNative,
+} from './native-notifications.js';
 
 export interface PomoState {
   mode: PomoMode;
@@ -175,6 +179,22 @@ class AppState {
   // --- Block CRUD ---
 
   /** Count active (pending) pool items. Used to enforce POOL_MAX_ACTIVE. */
+  /** Snapshot of state used by native notification orchestration. Returns
+   *  only what the scheduler needs so callers can pass it without leaking the
+   *  full AppState. */
+  notifSnapshot(): { blocks: FlowBlock[]; completions: Map<string, BlockStatus>; energyLogs: EnergyLogRow[] } {
+    return { blocks: this.blocks, completions: this.completions, energyLogs: this.energyLogs };
+  }
+
+  /** True when a recurring block has been completed/skipped/dismissed for
+   *  today — used by native schedulers to push today's slot to next week. */
+  isBlockSuppressedToday(block: FlowBlock): boolean {
+    if (!block.id || block.date) return false; // one-off suppression is full-cancel
+    const today = getTodayDate();
+    const s = this.completions.get(`${block.id}_${today}`);
+    return s === 'done' || s === 'skipped' || s === 'dismissed';
+  }
+
   countActivePool(): number {
     return this.blocks.filter(b =>
       !isScheduled(b) && b.status !== 'done' && b.status !== 'skipped'
@@ -219,7 +239,8 @@ class AppState {
       return false;
     }
 
-    this.blocks.push(blockFromRow(data));
+    const inserted = blockFromRow(data);
+    this.blocks.push(inserted);
     emit({
       type: 'block.created',
       entity_id: data.id,
@@ -231,6 +252,8 @@ class AppState {
         linked_event_id: block.linked_event_id, source,
       },
     });
+    scheduleBlockNotifsNative(inserted, this.isBlockSuppressedToday(inserted));
+    syncSummariesNative(this.notifSnapshot());
     this.showSaveBanner();
     return true;
   }
@@ -267,7 +290,8 @@ class AppState {
       return false;
     }
 
-    this.blocks[index] = blockFromRow(data);
+    const updated = blockFromRow(data);
+    this.blocks[index] = updated;
     const after = {
       type: block.type, title: block.title, menu: block.menu,
       start: block.start, duration: block.duration,
@@ -282,6 +306,8 @@ class AppState {
         payload: { changes, source },
       });
     }
+    scheduleBlockNotifsNative(updated, this.isBlockSuppressedToday(updated));
+    syncSummariesNative(this.notifSnapshot());
     this.showSaveBanner();
     return true;
   }
@@ -301,7 +327,9 @@ class AppState {
         reason: source === 'calendar_reconcile' ? 'calendar_reconcile' : 'user',
       },
     });
+    cancelBlockNotifsNative(existing.id);
     this.blocks.splice(index, 1);
+    syncSummariesNative(this.notifSnapshot());
     this.showSaveBanner();
   }
 
@@ -381,6 +409,21 @@ class AppState {
         payload: { date, block_type: existing.type, title: existing.title },
       });
     }
+
+    // Native scheduling reflects the status change. For recurring blocks
+    // today's start+end slot is pushed to next week when suppressed; for
+    // one-off blocks the whole pair is cancelled. Re-arm summaries because
+    // "hasPendingScheduledToday" can flip when a block is completed.
+    const refreshed = this.blocks[index];
+    const suppressed = status === 'done' || status === 'skipped' || status === 'dismissed';
+    if (existing.date || existing.days.length === 0) {
+      if (suppressed) cancelBlockNotifsNative(existing.id);
+      else scheduleBlockNotifsNative(refreshed, false);
+    } else {
+      refreshBlockTodayNative(refreshed, suppressed);
+    }
+    syncSummariesNative(this.notifSnapshot());
+
     return true;
   }
 
@@ -556,6 +599,9 @@ class AppState {
         entity_type: null,
         payload: { value, tier: valueToTier(value) },
       });
+      // Logging energy within the last 2h suppresses midday-pulse and
+      // pool-nudge; re-arm summaries so the conditional cancels take effect.
+      syncSummariesNative(this.notifSnapshot());
     }
   }
 

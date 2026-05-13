@@ -3,8 +3,7 @@ import { supabase } from './supabase.js';
 import { PomoMode, $id, esc } from './utils.js';
 import { emit } from './events.js';
 import { isNative } from './native.js';
-
-const NATIVE_NOTIFICATION_ID = 1;
+import { schedulePomoCompletionNative, cancelPomoCompletionNative } from './native-notifications.js';
 
 const RING_CIRCUMFERENCE = 2 * Math.PI * 124;
 const POMO_MODES: PomoMode[] = ['focus', 'short', 'long'];
@@ -132,15 +131,21 @@ function clearCompletionTimeout(): void {
 
 // --- Background completion (reliable notification when app is suspended) ---
 //
-// Web: registers a server-side timer so a Web Push is delivered at completion.
-// Native: schedules an OS-level local notification — fires even if the app is
-// killed, and skips the server round-trip entirely.
+// Web: registers a server-side timer so a Web Push is delivered at completion
+// from the Edge Function. Native: schedules an OS-level local notification —
+// fires even if the app is killed, and skips the server round-trip entirely.
 
 async function savePushTimer(): Promise<void> {
-  if (isNative) { scheduleNativeCompletion(); return; }
-  if (!state.userId) return;
   const { pomo } = state;
   if (!pomo.running) return;
+
+  if (isNative) {
+    const fireAt = new Date(Date.now() + pomo.secondsLeft * 1000);
+    schedulePomoCompletionNative(fireAt, pomo.mode, currentTask || '');
+    return;
+  }
+
+  if (!state.userId) return;
   const completeAt = new Date(Date.now() + pomo.secondsLeft * 1000).toISOString();
   await supabase.from('pomo_active_timers').upsert({
     user_id: state.userId,
@@ -153,50 +158,12 @@ async function savePushTimer(): Promise<void> {
 }
 
 async function clearPushTimer(): Promise<void> {
-  if (isNative) { cancelNativeCompletion(); return; }
+  if (isNative) { cancelPomoCompletionNative(); return; }
   if (!state.userId) return;
   supabase.from('pomo_active_timers').delete().eq('user_id', state.userId)
     .then(({ error }) => {
       if (error) console.warn('[pomo] push timer clear failed:', error.message);
     });
-}
-
-async function scheduleNativeCompletion(): Promise<void> {
-  const { pomo } = state;
-  if (!pomo.running) return;
-  try {
-    const { LocalNotifications } = await import('@capacitor/local-notifications');
-    const perm = await LocalNotifications.checkPermissions();
-    if (perm.display !== 'granted') {
-      const req = await LocalNotifications.requestPermissions();
-      if (req.display !== 'granted') return;
-    }
-    await LocalNotifications.cancel({ notifications: [{ id: NATIVE_NOTIFICATION_ID }] });
-    const fireAt = new Date(Date.now() + pomo.secondsLeft * 1000);
-    const isFocus = pomo.mode === 'focus';
-    await LocalNotifications.schedule({
-      notifications: [{
-        id: NATIVE_NOTIFICATION_ID,
-        title: isFocus ? 'Focus complete' : 'Break over',
-        body: isFocus
-          ? (currentTask ? `"${currentTask}" — time for a break.` : 'Great work — time for a break.')
-          : 'Ready for another focus session?',
-        schedule: { at: fireAt, allowWhileIdle: true },
-        smallIcon: 'ic_stat_icon',
-      }],
-    });
-  } catch (err) {
-    console.warn('[pomo] native notification schedule failed:', err);
-  }
-}
-
-async function cancelNativeCompletion(): Promise<void> {
-  try {
-    const { LocalNotifications } = await import('@capacitor/local-notifications');
-    await LocalNotifications.cancel({ notifications: [{ id: NATIVE_NOTIFICATION_ID }] });
-  } catch {
-    /* plugin missing or already cancelled */
-  }
 }
 
 // --- Notifications ---

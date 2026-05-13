@@ -15,9 +15,6 @@ const config: CapacitorConfig = {
       splashFullScreen: true,
       splashImmersive: false,
     },
-    PushNotifications: {
-      presentationOptions: ['badge', 'sound', 'alert'],
-    },
     LocalNotifications: {
       // Status-bar (small) icon for every scheduled notification. Lives at
       // res/drawable-{density}/ic_stat_icon.png — a white silhouette of the

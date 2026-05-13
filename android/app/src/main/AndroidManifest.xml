@@ -35,16 +35,6 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
-
-        <!-- FCM (push notification) defaults. Without these, FCM messages that
-             don't override icon/color use system defaults — which on Android
-             means a white square and untinted accent. -->
-        <meta-data
-            android:name="com.google.firebase.messaging.default_notification_icon"
-            android:resource="@drawable/ic_stat_icon" />
-        <meta-data
-            android:name="com.google.firebase.messaging.default_notification_color"
-            android:resource="@color/notification_color" />
     </application>
 
     <!-- Permissions -->
